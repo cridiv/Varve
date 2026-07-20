@@ -9,15 +9,16 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 -- Every change Varve has observed in a model's DataHub lineage.
 -- ============================================================
 CREATE TABLE lineage_events (
-    event_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    model_id             TEXT NOT NULL,          -- DataHub urn of the affected model/dataset
-    node_type            TEXT NOT NULL,          -- 'feature' | 'threshold' | 'pipeline_step' | 'retrain' | 'deployment'
-    node_urn             TEXT NOT NULL,          -- the specific DataHub node this event touched
-    event_type           TEXT NOT NULL,          -- 'added' | 'modified' | 'removed' | 'retrained'
-    event_timestamp      TIMESTAMPTZ NOT NULL,
-    actor                TEXT,                   -- engineer or system that made the change, if known
-    documentation_present BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+    event_id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    model_id                 TEXT NOT NULL,          -- DataHub urn of the affected model/dataset
+    node_type                TEXT NOT NULL,          -- 'feature' | 'threshold' | 'pipeline_step' | 'retrain' | 'deployment'
+    node_urn                 TEXT NOT NULL,          -- the specific DataHub node this event touched
+    event_type               TEXT NOT NULL,          -- 'added' | 'modified' | 'removed' | 'retrained'
+    event_timestamp          TIMESTAMPTZ NOT NULL,
+    actor                    TEXT,                   -- engineer or system that made the change, if known
+    actor_departed_within_90d BOOLEAN NOT NULL DEFAULT FALSE, -- Tier 2: departure flag within 90 days
+    documentation_present     BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at                TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX idx_lineage_events_model_id ON lineage_events (model_id);
@@ -67,6 +68,24 @@ CREATE INDEX idx_incidents_root_cause_event_id ON incidents (root_cause_event_id
 
 
 -- ============================================================
+-- patterns (Tier 2 Org-Wide Rollup Table)
+-- Aggregates pattern occurrences by scope (model_id, actor, or 'org_wide')
+-- ============================================================
+CREATE TABLE patterns (
+    pattern_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    pattern_type           TEXT NOT NULL,          -- 'departing_engineer_change' | 'stale_threshold' | 'orphaned_experiment' | 'reactive_fix'
+    scope_key              TEXT NOT NULL,          -- model_id URN, actor name (e.g. 'J. Alvarez'), or 'org_wide'
+    times_observed         INTEGER NOT NULL DEFAULT 0,
+    times_preceded_incident INTEGER NOT NULL DEFAULT 0,
+    avg_detection_lag_days NUMERIC DEFAULT 0,
+    last_updated           TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_patterns_scope_key ON patterns (scope_key);
+CREATE INDEX idx_patterns_type ON patterns (pattern_type);
+
+
+-- ============================================================
 -- findings
 -- The output artifact: what gets shown in the UI and written
 -- back to DataHub.
@@ -98,5 +117,7 @@ UNION ALL
 SELECT 'business_metrics', count(*) FROM business_metrics
 UNION ALL
 SELECT 'incidents', count(*) FROM incidents
+UNION ALL
+SELECT 'patterns', count(*) FROM patterns
 UNION ALL
 SELECT 'findings', count(*) FROM findings;
