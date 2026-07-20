@@ -6,7 +6,7 @@ import sys
 import os
 import json
 
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from fastapi.testclient import TestClient
 from main import app
@@ -50,7 +50,17 @@ def test_api():
     assert resp.status_code == 200
     assert detail["finding_id"] == sample_finding_id
 
-    print("\n✅ STEP 7 COMPLETE: All REST endpoints return valid JSON!")
+    # 4. Test POST /findings/{finding_id}/writeback (Step 9.3)
+    resp = client.post(f"/findings/{sample_finding_id}/writeback")
+    print(f"\n► POST /findings/{sample_finding_id}/writeback -> Status {resp.status_code}")
+    wb = resp.json()
+    print(f"  Status:       {wb.get('status')}")
+    print(f"  Message:      {wb.get('message')}")
+    print(f"  Dataset URN:  {wb.get('details', {}).get('dataset_urn')}")
+    assert resp.status_code == 200
+    assert wb["status"] == "success"
+
+    print("\n✅ STEP 7 & STEP 9 COMPLETE: All REST & Write-Back endpoints verified!")
 
 if __name__ == "__main__":
     test_api()

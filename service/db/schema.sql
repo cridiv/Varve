@@ -81,6 +81,7 @@ CREATE TABLE findings (
     recommended_action   TEXT,                             -- Claude-generated
     status               TEXT NOT NULL DEFAULT 'open',     -- 'open' | 'reviewed' | 'resolved' | 'dismissed'
     written_back_at       TIMESTAMPTZ,                      -- null until write-back to DataHub completes
+    datahub_annotation_urn TEXT,                             -- DataHub metadata aspect reference
     created_at             TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

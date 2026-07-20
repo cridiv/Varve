@@ -35,8 +35,8 @@ MODEL_API_KEY = os.environ.get("MODEL_API_KEY")
 
 
 # --- DataHub connection ---
-DATAHUB_GMS_URL = os.environ.get("DATAHUB_GMS_URL", "http://localhost:8080")
-DATAHUB_GMS_TOKEN = os.environ.get("DATAHUB_GMS_TOKEN")  # optional for local quickstart
+DATAHUB_GMS_URL = os.environ.get("DATAHUB_GMS_URL") or "http://localhost:8080"
+DATAHUB_GMS_TOKEN = os.environ.get("DATAHUB_GMS_TOKEN") or None  # optional for local quickstart
 
 
 # --- Postgres connection ---

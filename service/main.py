@@ -210,3 +210,22 @@ def get_finding_detail(finding_id: str):
         },
         "matched_incident": matched_incident,
     }
+
+
+@app.post("/findings/{finding_id}/writeback")
+def trigger_writeback(finding_id: str):
+    """
+    Step 9.3: Triggers DataHub metadata write-back for the specified finding.
+    Annotates the lineage dataset node on DataHub GMS and updates database.
+    """
+    from datahub_writeback import writeback_finding_to_datahub, confirm_datahub_annotation
+    try:
+        res = writeback_finding_to_datahub(finding_id)
+        confirm_datahub_annotation(res["dataset_urn"])
+        return {
+            "status": "success",
+            "message": "Finding metadata successfully written back to DataHub",
+            "details": res,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"DataHub write-back failed: {str(e)}")
