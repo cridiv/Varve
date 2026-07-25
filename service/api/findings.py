@@ -11,9 +11,15 @@ router = APIRouter(tags=["findings"])
 
 EVIDENCE_LABELS = {
     "model": "Backed by direct model incident history",
-    "actor": "Backed by engineer cross-model incident history",
+    "actor": "Backed by actor cross-model incident history",
     "org_wide": "Backed by company-wide pattern history",
     "industry_general": "Backed by published industry data (Cold-start fallback)",
+}
+
+TAG_SOURCE_LABELS = {
+    "datahub_native": "Verified DataHub Catalog Tag",
+    "inferred": "Inferred from Schema (Heuristic Fallback)",
+    "none": "Untagged",
 }
 
 
@@ -31,6 +37,8 @@ def get_risk_ranking():
             f.validated,
             f.evidence_scope,
             f.routed_to_team,
+            f.severity_multiplier,
+            f.tag_source,
             f.status,
             f.narrative,
             f.recommended_action,
@@ -56,6 +64,7 @@ def get_risk_ranking():
         urn_parts = r["model_id"].split(".")
         display_name = urn_parts[-1].replace(",PROD)", "") if urn_parts else r["model_id"]
         ev_scope = r.get("evidence_scope", "org_wide")
+        ts = r.get("tag_source", "none")
         
         rankings.append({
             "finding_id": str(r["finding_id"]),
@@ -66,6 +75,9 @@ def get_risk_ranking():
             "evidence_scope": ev_scope,
             "evidence_label": EVIDENCE_LABELS.get(ev_scope, "Backed by company-wide pattern history"),
             "routed_to_team": r.get("routed_to_team", "Ian Chen (Director of Data Engineering)"),
+            "severity_multiplier": float(r.get("severity_multiplier") or 1.0),
+            "tag_source": ts,
+            "tag_source_label": TAG_SOURCE_LABELS.get(ts, "Untagged"),
             "status": r["status"],
             "actor": r["actor"],
             "node_type": r["node_type"],
@@ -92,6 +104,8 @@ def get_findings_by_team(team: str):
             f.validated,
             f.evidence_scope,
             f.routed_to_team,
+            f.severity_multiplier,
+            f.tag_source,
             f.status,
             f.narrative,
             f.recommended_action,
@@ -119,6 +133,7 @@ def get_findings_by_team(team: str):
         urn_parts = r["model_id"].split(".")
         display_name = urn_parts[-1].replace(",PROD)", "") if urn_parts else r["model_id"]
         ev_scope = r.get("evidence_scope", "org_wide")
+        ts = r.get("tag_source", "none")
 
         team_findings.append({
             "finding_id": str(r["finding_id"]),
@@ -129,6 +144,9 @@ def get_findings_by_team(team: str):
             "evidence_scope": ev_scope,
             "evidence_label": EVIDENCE_LABELS.get(ev_scope, "Backed by company-wide pattern history"),
             "routed_to_team": r.get("routed_to_team", "Ian Chen (Director of Data Engineering)"),
+            "severity_multiplier": float(r.get("severity_multiplier") or 1.0),
+            "tag_source": ts,
+            "tag_source_label": TAG_SOURCE_LABELS.get(ts, "Untagged"),
             "status": r["status"],
             "actor": r["actor"],
             "node_type": r["node_type"],
@@ -155,6 +173,7 @@ def get_finding_detail(finding_id: str):
             f.validated,
             f.evidence_scope,
             f.routed_to_team,
+            f.severity_multiplier,
             f.narrative,
             f.recommended_action,
             f.status,
@@ -212,6 +231,7 @@ def get_finding_detail(finding_id: str):
     urn_parts = finding["model_id"].split(".")
     display_name = urn_parts[-1].replace(",PROD)", "") if urn_parts else finding["model_id"]
     ev_scope = finding.get("evidence_scope", "org_wide")
+    ts = finding.get("tag_source", "none")
 
     return {
         "finding_id": str(finding["finding_id"]),
@@ -222,6 +242,9 @@ def get_finding_detail(finding_id: str):
         "evidence_scope": ev_scope,
         "evidence_label": EVIDENCE_LABELS.get(ev_scope, "Backed by company-wide pattern history"),
         "routed_to_team": finding.get("routed_to_team", "Ian Chen (Director of Data Engineering)"),
+        "severity_multiplier": float(finding.get("severity_multiplier") or 1.0),
+        "tag_source": ts,
+        "tag_source_label": TAG_SOURCE_LABELS.get(ts, "Untagged"),
         "status": finding["status"],
         "narrative": finding["narrative"],
         "recommended_action": finding["recommended_action"],

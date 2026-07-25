@@ -1,0 +1,59 @@
+{
+  "type": "record",
+  "name": "ValidatedRiskPattern",
+  "namespace": "com.linkedin.dataset",
+  "doc": "PROPOSAL / REFERENCE STUB — not a functional or merged DataHub aspect. Written to accompany docs/datahub-rfc-validated-risk-pattern.md as a concrete starting point for schema discussion, matching DataHub's existing aspect-definition conventions (see e.g. datahub/metadata-models for comparable examples such as InstitutionalMemory or Ownership). This file is not wired into any running ingestion pipeline.",
+  "fields": [
+    {
+      "name": "patternType",
+      "type": "string",
+      "doc": "Free-form but conventionally namespaced pattern identifier, e.g. 'departingEngineerChange', 'staleThreshold', 'orphanedExperiment', 'reactiveFix'. Intentionally not a closed enum so new agents can register new pattern shapes without a core schema migration."
+    },
+    {
+      "name": "scopeKey",
+      "type": "string",
+      "doc": "What this evidence is scoped to. Either a specific entity urn, a specific actor identifier, or the literal string 'org_wide'."
+    },
+    {
+      "name": "timesObserved",
+      "type": "int",
+      "doc": "How many times this pattern shape has been observed at this scope."
+    },
+    {
+      "name": "timesPrecededIncident",
+      "type": "int",
+      "doc": "Of those observations, how many were later linked to a confirmed incident via the writing agent's own causal record. This aspect is a rollup, not the system of record for the underlying incidents."
+    },
+    {
+      "name": "avgDetectionLagDays",
+      "type": ["null", "float"],
+      "default": null,
+      "doc": "Average time, in days, between the originating change and incident detection, across matched cases. Null if no matched cases exist yet."
+    },
+    {
+      "name": "evidenceTier",
+      "type": {
+        "type": "enum",
+        "name": "EvidenceTier",
+        "symbols": ["ORG_VALIDATED", "ACTOR_VALIDATED", "INDUSTRY_GENERAL"]
+      },
+      "doc": "REQUIRED. Declares how strong the underlying evidence actually is. ORG_VALIDATED and ACTOR_VALIDATED are backed by this organization's own confirmed incident history. INDUSTRY_GENERAL is a hand-sourced external base rate used only when no organization-specific evidence exists yet, and must never be presented with the same implied confidence as the validated tiers. This field is mandatory precisely so a consumer cannot accidentally conflate the two."
+    },
+    {
+      "name": "evidenceSourceNote",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Free-text citation for where the evidence came from. In practice required whenever evidenceTier = INDUSTRY_GENERAL, so that tier remains auditable rather than asserted."
+    },
+    {
+      "name": "lastValidatedAt",
+      "type": "long",
+      "doc": "Epoch millis. When this evidence was last recomputed by the writing agent."
+    },
+    {
+      "name": "sourceAgent",
+      "type": "string",
+      "doc": "Identifier of the agent that computed this entry, e.g. 'varve'. Multiple agents may co-populate this aspect on the same entity; consumers should key on sourceAgent rather than assume a single authoritative writer."
+    }
+  ]
+}

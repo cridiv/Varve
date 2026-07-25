@@ -154,10 +154,11 @@ def _derive_pattern_type(
 
 def resolve_pattern_severity_by_trust_scope(
     pattern_type: str,
-    actor: Optional[str],
-    direct_incidents: List[Dict[str, Any]],
-    cross_model_incidents: List[Dict[str, Any]],
-    provisional_severity: str,
+    actor: Optional[str] = None,
+    direct_incidents: Optional[List[Dict[str, Any]]] = None,
+    cross_model_incidents: Optional[List[Dict[str, Any]]] = None,
+    provisional_severity: str = "high",
+    model_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     D1.4 Trust Hierarchy Scope Resolution:

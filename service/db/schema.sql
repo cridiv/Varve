@@ -101,6 +101,8 @@ CREATE TABLE findings (
     validated           BOOLEAN NOT NULL DEFAULT FALSE,   -- true if a real incident precedent was found
     evidence_scope      TEXT NOT NULL DEFAULT 'org_wide', -- 'model' | 'actor' | 'org_wide' | 'industry_general'
     routed_to_team      TEXT NOT NULL DEFAULT 'Ian Chen', -- auto-routed owner resolved from DataHub ownership aspect
+    severity_multiplier NUMERIC NOT NULL DEFAULT 1.0,     -- governance tag multiplier (PII=1.3x, business-critical=1.5x)
+    tag_source          TEXT NOT NULL DEFAULT 'inferred', -- 'datahub_native' | 'inferred' | 'none'
     narrative            TEXT,                             -- Claude-generated explanation
     recommended_action   TEXT,                             -- Claude-generated
     status               TEXT NOT NULL DEFAULT 'open',     -- 'open' | 'reviewed' | 'resolved' | 'dismissed'
@@ -114,6 +116,7 @@ CREATE INDEX idx_findings_severity ON findings (severity);
 CREATE INDEX idx_findings_status ON findings (status);
 CREATE INDEX idx_findings_evidence_scope ON findings (evidence_scope);
 CREATE INDEX idx_findings_routed_to_team ON findings (routed_to_team);
+CREATE INDEX idx_findings_tag_source ON findings (tag_source);
 
 
 -- ============================================================
@@ -122,8 +125,8 @@ CREATE INDEX idx_findings_routed_to_team ON findings (routed_to_team);
 -- ============================================================
 CREATE TABLE ledger (
     ledger_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    event_type    TEXT NOT NULL,   -- 'finding_created' | 'severity_set' | 'downgrade' | 'writeback' | 'incident_confirmed' | 'incident_dismissed'
-    finding_id    UUID REFERENCES findings(finding_id),
+    event_type    TEXT NOT NULL,   -- 'finding_created' | 'severity_set' | 'downgrade' | 'writeback' | 'incident_confirmed' | 'incident_dismissed' | 'ownership_routed' | 'severity_tag_adjusted'
+    finding_id    UUID REFERENCES findings(finding_id) ON DELETE SET NULL,
     payload       JSONB NOT NULL,  -- whatever's relevant to this event type
     prev_hash     TEXT,            -- hash of the previous row, null for the first row
     this_hash     TEXT NOT NULL,   -- sha256(prev_hash + event_type + finding_id + payload + created_at)

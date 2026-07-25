@@ -10,13 +10,16 @@ Core business logic:
 import sys
 import os
 import json
+import time
 import requests
+import concurrent.futures
 from typing import Dict, Any, List
 
 service_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if service_dir not in sys.path:
     sys.path.append(service_dir)
 
+from openai import OpenAI
 from config.config import (
     MODEL_INVOKE_URL,
     MODEL_NAME,
@@ -28,35 +31,46 @@ from config.config import (
 from db.connection import get_db_connection
 from services.correlation_service import classify_pattern
 from services.ledger_service import append_to_ledger
-from services.datahub_service import resolve_dataset_routed_owner
+from services.datahub_service import (
+    resolve_dataset_routed_owner,
+    resolve_dataset_routed_owner_info,
+    resolve_dataset_governance_multiplier,
+)
+
+
+def get_openai_client() -> OpenAI:
+    api_key = MODEL_API_KEY.replace("Bearer ", "").strip() if MODEL_API_KEY else ""
+    base_url = MODEL_INVOKE_URL.rstrip("/")
+    if base_url.endswith("/chat/completions"):
+        base_url = base_url.replace("/chat/completions", "")
+    return OpenAI(base_url=base_url, api_key=api_key)
 
 
 FINDING_PROMPT_TEMPLATE = """You are Varve, an AI Risk & Decision Intelligence Engine for production data pipelines and ML models.
+Synthesize a concise, highly professional narrative and recommended action for the following classified risk event.
 
-Analyze the following lineage change event and historical correlation evidence, then synthesize a concise narrative and recommended action.
-
-### Event Details:
+EVENT CLASSIFICATION:
 - Model URN: {model_id}
-- Affected Node: {node_type}
+- Lineage Change Node: {node_type}
 - Change Actor: {actor}
-- Pattern Classification: {pattern_type}
-- Validated Precedent Found: {validated}
-- Assessed Risk Severity: {severity}
+- Pattern Type: {pattern_type}
+- Historically Validated Incident Precedent: {validated}
+- Final Severity: {severity}
 
-### Historical Incident Match:
+HISTORICAL INCIDENT CONTEXT:
 {incident_context}
 
-### Instructions:
-1. Narrative: Write a 2-3 sentence technical explanation of what occurred. Be specific with dataset names, actor names, dates, detection lags, and business metric impacts if present. Use a confident, analytical tone.
-2. Recommended Action: Write a 1-2 sentence actionable next step for the engineering team.
-3. Respond ONLY in valid JSON with keys "narrative" and "recommended_action". Do NOT include any code block ticks or surrounding commentary.
-"""
+Output ONLY valid JSON matching this exact structure with no extra keys or surrounding text:
+{{
+  "narrative": "A concise 2-sentence explanation of why this change pattern is risky or benign based on organizational precedent.",
+  "recommended_action": "A clear, actionable 1-sentence remediation step for engineers."
+}}"""
 
 
 def generate_finding_narrative(classification: Dict[str, Any]) -> Dict[str, str]:
     """
-    Step 6.1: Calls NVIDIA API with stepfun-ai/step-3.7-flash to generate
-    structured narrative and recommended action for a classified event.
+    Step 6.1: Calls NVIDIA API with deepseek-ai/deepseek-v4-flash (via OpenAI SDK)
+    to generate structured narrative and recommended action for a classified event.
     """
     if classification["matched_incidents"]:
         inc = classification["matched_incidents"][0]
@@ -90,40 +104,48 @@ def generate_finding_narrative(classification: Dict[str, Any]) -> Dict[str, str]
         incident_context=incident_context,
     )
 
-    headers = {
-        "Content-Type": "application/json",
-        "Authorization": MODEL_API_KEY if MODEL_API_KEY and MODEL_API_KEY.startswith("Bearer ") else f"Bearer {MODEL_API_KEY}",
-    }
+    client = get_openai_client()
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            completion = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=MODEL_TEMPERATURE,
+                top_p=MODEL_TOP_P,
+                max_tokens=MODEL_MAX_TOKENS,
+                extra_body={"chat_template_kwargs": {"thinking": True, "reasoning_effort": "high"}},
+                stream=False,
+            )
 
-    payload = {
-        "model": MODEL_NAME,
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": MODEL_TEMPERATURE,
-        "top_p": MODEL_TOP_P,
-        "max_tokens": MODEL_MAX_TOKENS,
-    }
+            reasoning = (
+                getattr(completion.choices[0].message, "reasoning", None)
+                or getattr(completion.choices[0].message, "reasoning_content", None)
+            )
+            if reasoning:
+                model_short = classification["model_id"].split(".")[-1].replace(",PROD)", "")
+                print(f"🧠 [DeepSeek Reasoning - {model_short}]: {reasoning[:120]}...")
 
-    try:
-        response = requests.post(MODEL_INVOKE_URL, headers=headers, json=payload, timeout=30)
-        response.raise_for_status()
-        res_data = response.json()
-        raw_text = res_data["choices"][0]["message"]["content"].strip()
+            raw_text = completion.choices[0].message.content.strip()
 
-        if raw_text.startswith("```"):
-            lines = raw_text.splitlines()
-            if lines[0].startswith("```"):
-                lines = lines[1:]
-            if lines and lines[-1].startswith("```"):
-                lines = lines[:-1]
-            raw_text = "\n".join(lines).strip()
+            if raw_text.startswith("```"):
+                lines = raw_text.splitlines()
+                if lines[0].startswith("```"):
+                    lines = lines[1:]
+                if lines and lines[-1].startswith("```"):
+                    lines = lines[:-1]
+                raw_text = "\n".join(lines).strip()
 
-        parsed = json.loads(raw_text)
-        return {
-            "narrative": parsed.get("narrative", raw_text),
-            "recommended_action": parsed.get("recommended_action", "Review change with team."),
-        }
-    except Exception as e:
-        print(f"[warning] LLM synthesis fallback triggered for {classification['event_id']}: {e}")
+            parsed = json.loads(raw_text)
+            return {
+                "narrative": parsed.get("narrative", raw_text),
+                "recommended_action": parsed.get("recommended_action", "Review change with team."),
+            }
+        except Exception as e:
+            if attempt < max_retries - 1 and ("503" in str(e) or "ResourceExhausted" in str(e) or "rate" in str(e).lower()):
+                time.sleep(1.5 * (attempt + 1))
+                continue
+            print(f"[warning] DeepSeek LLM synthesis fallback triggered for {classification['event_id']}: {e}")
         if classification["validated"]:
             return {
                 "narrative": f"On date of change, {classification['actor']} made an undocumented {classification['node_type']} change on {classification['model_id']}. This change went unreviewed and directly caused a downstream incident after an extended detection lag.",
@@ -136,10 +158,146 @@ def generate_finding_narrative(classification: Dict[str, Any]) -> Dict[str, str]
             }
 
 
-def populate_findings() -> List[Dict[str, Any]]:
+def process_single_event(eid: str) -> Dict[str, Any]:
+    time.sleep(0.1)  # Stagger requests to avoid 503 rate-limit spikes
+    c = classify_pattern(eid)
+    narrative_res = generate_finding_narrative(c)
+    routed_info = resolve_dataset_routed_owner_info(c["model_id"])
+    routed_team = routed_info["routed_to_team"]
+    gov = resolve_dataset_governance_multiplier(c["model_id"])
+    multiplier = gov["multiplier"]
+    tag_source = gov["tag_source"]
+
+    # E2.2 Final step severity escalation based on governance multiplier
+    final_severity = c["severity"]
+    if c["severity"] == "medium" and multiplier >= 1.5:
+        final_severity = "high"
+    elif c["severity"] == "low" and multiplier >= 1.5:
+        final_severity = "medium"
+
+    upsert_sql = """
+        INSERT INTO findings (
+            model_id,
+            related_event_id,
+            severity,
+            validated,
+            evidence_scope,
+            routed_to_team,
+            severity_multiplier,
+            tag_source,
+            narrative,
+            recommended_action,
+            status
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 'open')
+        ON CONFLICT DO NOTHING
+        RETURNING finding_id, created_at;
+    """
+
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("SELECT finding_id FROM findings WHERE related_event_id = %s;", (eid,))
+            existing = cur.fetchone()
+
+            if existing:
+                update_sql = """
+                    UPDATE findings SET
+                        severity = %s,
+                        validated = %s,
+                        evidence_scope = %s,
+                        routed_to_team = %s,
+                        severity_multiplier = %s,
+                        tag_source = %s,
+                        narrative = %s,
+                        recommended_action = %s
+                    WHERE related_event_id = %s
+                    RETURNING finding_id, created_at;
+                """
+                cur.execute(update_sql, (
+                    final_severity,
+                    c["validated"],
+                    c["scope_key"],
+                    routed_team,
+                    multiplier,
+                    tag_source,
+                    narrative_res["narrative"],
+                    narrative_res["recommended_action"],
+                    eid,
+                ))
+                row = cur.fetchone()
+            else:
+                cur.execute(upsert_sql, (
+                    c["model_id"],
+                    eid,
+                    final_severity,
+                    c["validated"],
+                    c["scope_key"],
+                    routed_team,
+                    multiplier,
+                    tag_source,
+                    narrative_res["narrative"],
+                    narrative_res["recommended_action"],
+                ))
+                row = cur.fetchone()
+
+            if not row:
+                cur.execute("SELECT finding_id FROM findings WHERE related_event_id = %s;", (eid,))
+                row = cur.fetchone()
+        conn.commit()
+
+    fid = str(row["finding_id"])
+
+    # B2.2 Ledger Event 1: finding_created
+    append_to_ledger(
+        event_type="finding_created",
+        finding_id=fid,
+        payload={
+            "model_id": c["model_id"],
+            "related_event_id": eid,
+            "pattern_type": c["pattern_type"],
+            "actor": c["actor"],
+            "evidence_scope": c["scope_key"],
+            "routed_to_team": routed_team,
+            "severity_multiplier": multiplier,
+            "tag_source": tag_source,
+            "governance_tags": gov["tags_found"],
+            "narrative": narrative_res["narrative"],
+            "recommended_action": narrative_res["recommended_action"],
+        }
+    )
+
+    # E1 Ledger Event 2: ownership_routed
+    append_to_ledger(
+        event_type="ownership_routed",
+        finding_id=fid,
+        payload={
+            "model_id": c["model_id"],
+            "routed_to_team": routed_team,
+            "priority_rule_matched": routed_info["priority_rule_matched"],
+        }
+    )
+
+    # E2 Ledger Event 3: severity_tag_adjusted
+    append_to_ledger(
+        event_type="severity_tag_adjusted",
+        finding_id=fid,
+        payload={
+            "model_id": c["model_id"],
+            "base_severity": c["severity"],
+            "final_severity": final_severity,
+            "severity_multiplier": multiplier,
+            "governance_tags": gov["tags_found"],
+            "tag_source": tag_source,
+        }
+    )
+
+    return {"finding_id": fid, "model_id": c["model_id"], "severity": final_severity, "narrative": narrative_res["narrative"], "recommended_action": narrative_res["recommended_action"]}
+
+
+def populate_findings(max_workers: int = 2) -> List[Dict[str, Any]]:
     """
     Step 7.2: Evaluates all lineage events in PostgreSQL, runs correlation classification,
-    synthesizes narrative & action via LLM (NVIDIA StepFun AI), and populates findings table.
+    synthesizes narrative & action via DeepSeek v4 Flash in parallel (2 workers),
+    applies governance tag multipliers, and populates findings table.
     """
     events_query = "SELECT event_id FROM lineage_events ORDER BY event_timestamp;"
     with get_db_connection() as conn:
@@ -150,144 +308,34 @@ def populate_findings() -> List[Dict[str, Any]]:
     event_ids = [str(r["event_id"]) for r in rows]
 
     print(f"\n=======================================================")
-    print(f"   POPULATING FINDINGS TABLE VIA NVIDIA STEPFUN LLM")
+    print(f"   PARALLEL FINDINGS SYNTHESIS (Workers={max_workers})")
     print(f"=======================================================")
-    print(f"Evaluating {len(event_ids)} lineage events...\n")
+    print(f"Synthesizing narratives for {len(event_ids)} events across {max_workers} worker threads...\n")
 
-    stored_findings = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+        results = list(executor.map(process_single_event, event_ids))
 
-    for eid in event_ids:
-        c = classify_pattern(eid)
-        narrative_res = generate_finding_narrative(c)
-        routed_team = resolve_dataset_routed_owner(c["model_id"])
-
-        upsert_sql = """
-            INSERT INTO findings (
-                model_id,
-                related_event_id,
-                severity,
-                validated,
-                evidence_scope,
-                routed_to_team,
-                narrative,
-                recommended_action,
-                status
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'open')
-            ON CONFLICT DO NOTHING
-            RETURNING finding_id, created_at;
-        """
-
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT finding_id FROM findings WHERE related_event_id = %s;", (eid,))
-                existing = cur.fetchone()
-
-                if existing:
-                    update_sql = """
-                        UPDATE findings SET
-                            severity = %s,
-                            validated = %s,
-                            evidence_scope = %s,
-                            routed_to_team = %s,
-                            narrative = %s,
-                            recommended_action = %s
-                        WHERE related_event_id = %s
-                        RETURNING finding_id, created_at;
-                    """
-                    cur.execute(update_sql, (
-                        c["severity"],
-                        c["validated"],
-                        c["scope_key"],
-                        routed_team,
-                        narrative_res["narrative"],
-                        narrative_res["recommended_action"],
-                        eid,
-                    ))
-                    row = cur.fetchone()
-                else:
-                    cur.execute(upsert_sql, (
-                        c["model_id"],
-                        eid,
-                        c["severity"],
-                        c["validated"],
-                        c["scope_key"],
-                        routed_team,
-                        narrative_res["narrative"],
-                        narrative_res["recommended_action"],
-                    ))
-                    row = cur.fetchone()
-            conn.commit()
-
-        fid = str(row["finding_id"]) if row else "existing"
-
-        # B2.2 Ledger events: finding_created, severity_set, downgrade
-        append_to_ledger(
-            event_type="finding_created",
-            finding_id=fid,
-            payload={
-                "model_id": c["model_id"],
-                "related_event_id": eid,
-                "pattern_type": c["pattern_type"],
-                "actor": c["actor"],
-                "evidence_scope": c["scope_key"],
-                "routed_to_team": routed_team,
-                "narrative": narrative_res["narrative"],
-                "recommended_action": narrative_res["recommended_action"],
-            }
-        )
-
-        append_to_ledger(
-            event_type="severity_set",
-            finding_id=fid,
-            payload={
-                "model_id": c["model_id"],
-                "provisional_severity": c["provisional_severity"],
-                "final_severity": c["severity"],
-                "validated": c["validated"],
-            }
-        )
-
-        if c["provisional_severity"] != c["severity"]:
-            append_to_ledger(
-                event_type="downgrade",
-                finding_id=fid,
-                payload={
-                    "model_id": c["model_id"],
-                    "provisional_severity": c["provisional_severity"],
-                    "final_severity": c["severity"],
-                    "reason": "No historical incident precedent found for pattern",
-                    "validated": False,
-                }
-            )
-
-        stored_findings.append({
-            "finding_id": fid,
-            "event_id": eid,
-            "model_id": c["model_id"],
-            "severity": c["severity"],
-            "validated": c["validated"],
-            "narrative": narrative_res["narrative"],
-            "recommended_action": narrative_res["recommended_action"],
-        })
-
-        print(f"► Finding ID:  {fid}")
-        print(f"  Model URN:   {c['model_id']}")
-        print(f"  Severity:    {c['severity'].upper()} (Validated={c['validated']})")
-        print(f"  Narrative:   {narrative_res['narrative'][:90]}...")
-        print(f"  Action:      {narrative_res['recommended_action'][:90]}...")
-        print("-------------------------------------------------------")
-
-    return stored_findings
+    return results
 
 
 def verify_findings_table() -> None:
     """
-    Step 6.4: Query findings table end to end to confirm populated state.
+    Step 7.3 Verification helper.
     """
     query = """
-        SELECT f.finding_id, f.model_id, f.severity, f.validated, f.narrative, e.actor
+        SELECT
+            f.finding_id,
+            f.model_id,
+            f.severity,
+            f.validated,
+            f.evidence_scope,
+            f.routed_to_team,
+            f.severity_multiplier,
+            f.tag_source,
+            f.narrative,
+            f.recommended_action,
+            f.status
         FROM findings f
-        JOIN lineage_events e ON f.related_event_id = e.event_id
         ORDER BY f.created_at DESC;
     """
     with get_db_connection() as conn:
@@ -296,11 +344,21 @@ def verify_findings_table() -> None:
             rows = cur.fetchall()
 
     print(f"\n=======================================================")
-    print(f"   VERIFYING STORED FINDINGS IN DATABASE (Step 6.4)")
+    print(f"   FINDINGS TABLE INSPECTION ({len(rows)} RECORD(S) STORED)")
     print(f"=======================================================")
-    print(f"Total findings in database: {len(rows)}\n")
 
     for r in rows:
-        print(f"- Finding {r['finding_id']} | Model: {r['model_id'].split('.')[-1]} | Severity: {r['severity'].upper()} | Validated: {r['validated']}")
+        print(f"► Finding ID:  {r['finding_id']}")
+        print(f"  Model URN:   {r['model_id']}")
+        print(f"  Severity:    {r['severity'].upper()} (Validated={r['validated']})")
+        print(f"  Scope:       {r['evidence_scope']}")
+        print(f"  Routed To:   {r['routed_to_team']}")
+        print(f"  Tag Source:  {r['tag_source']} (Mult: {r['severity_multiplier']}x)")
+        print(f"  Narrative:   {r['narrative']}")
+        print(f"  Action:      {r['recommended_action']}")
+        print("-------------------------------------------------------")
 
-    print("\n✅ STEP 6 COMPLETE: Findings table populated and verified!")
+
+if __name__ == "__main__":
+    populate_findings()
+    verify_findings_table()

@@ -4,6 +4,8 @@
 
 Built for [Build with DataHub: The Agent Hackathon](https://datahub.devpost.com/) — Track: Production ML Agents.
 
+> **"Every claim Varve makes carries a visible label for how much you should trust it, and every one of those labels is independently checkable."**
+
 ---
 
 ## The one-minute version

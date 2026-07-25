@@ -132,18 +132,23 @@ def verify_ledger_chain() -> Dict[str, Any]:
             }
 
         expected_prev_hash = this_h
-        results.append({
+        row_item = {
             "index": idx,
             "ledger_id": str(r["ledger_id"]),
             "event_type": e_type,
             "finding_id": str(f_id) if f_id else None,
             "this_hash": this_h,
             "status": "PASS",
-        })
+        }
+        results.append(row_item)
+        prev_disp = prev_h[:12] + "..." if prev_h else "None"
+        this_disp = this_h[:12] + "..."
+        f_disp = str(f_id)[:8] + "..." if f_id else "None"
+        print(f"✔ [PASS] Row {idx:02d} | Event: {e_type:<22} | Finding: {f_disp:<11} | this_hash: {this_disp} | prev_hash: {prev_disp}")
 
     return {
         "valid": True,
-        "total_verified": len(rows),
+        "total_verified": len(results),
         "details": results,
-        "message": f"✔ {len(rows)}/{len(rows)} ledger entries verified, chain intact.",
+        "message": f"✔ {len(results)}/{len(results)} ledger entries verified, chain intact.",
     }

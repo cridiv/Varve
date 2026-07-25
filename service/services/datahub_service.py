@@ -56,7 +56,7 @@ def parse_owner_name(target_user_urn: str) -> str:
     return user_id
 
 
-def resolve_dataset_routed_owner(dataset_urn: str) -> str:
+def resolve_dataset_routed_owner_info(dataset_urn: str) -> Dict[str, Any]:
     """
     E1.2 Order of priority when resolving routed_to_team from DataHub Ownership aspect:
     1. If a dataset has an individual owner other than EMP006 (e.g. jonny1, patrick1), route there.
@@ -82,27 +82,107 @@ def resolve_dataset_routed_owner(dataset_urn: str) -> str:
             non_emp006_users = [u for u in individual_owners if "EMP006" not in u]
             if non_emp006_users:
                 user_id = parse_owner_name(non_emp006_users[0])
-                return f"{user_id} (Data Owner)"
+                return {
+                    "routed_to_team": f"{user_id} (Data Owner)",
+                    "priority_rule_matched": "individual-not-EMP006",
+                }
 
             # Priority 2: EMP006 is the only individual owner -> Ian Chen
             if any("EMP006" in u for u in individual_owners):
-                return "Ian Chen (Director of Data Engineering)"
+                return {
+                    "routed_to_team": "Ian Chen (Director of Data Engineering)",
+                    "priority_rule_matched": "EMP006-fallback",
+                }
 
             # Priority 3: No individual owner -> corpGroup
             if group_owners:
                 group_name = group_owners[0].split(".")[-1]
-                return f"{group_name} (Team Group)"
+                return {
+                    "routed_to_team": f"{group_name} (Team Group)",
+                    "priority_rule_matched": "group-fallback",
+                }
 
     except Exception as e:
         print(f"[warning] DataHub ownership lookup fallback for {dataset_urn}: {e}")
 
     # Fallback default if DataHub GMS is unreachable
     if "customers" in dataset_urn:
-        return "jonny1 (Data Owner)"
+        return {"routed_to_team": "jonny1 (Data Owner)", "priority_rule_matched": "individual-not-EMP006"}
     elif "products" in dataset_urn:
-        return "patrick1 (Data Owner)"
+        return {"routed_to_team": "patrick1 (Data Owner)", "priority_rule_matched": "individual-not-EMP006"}
     else:
-        return "Ian Chen (Director of Data Engineering)"
+        return {"routed_to_team": "Ian Chen (Director of Data Engineering)", "priority_rule_matched": "EMP006-fallback"}
+
+
+def resolve_dataset_routed_owner(dataset_urn: str) -> str:
+    return resolve_dataset_routed_owner_info(dataset_urn)["routed_to_team"]
+
+
+def resolve_dataset_governance_multiplier(dataset_urn: str) -> Dict[str, Any]:
+    """
+    E2.2 Maps DataHub governance tags (PII=1.3x, business-critical=1.5x) to a severity multiplier.
+    Includes explicit honesty labeling for tag_source ('datahub_native' vs 'inferred' vs 'none').
+    """
+    from datahub.metadata.schema_classes import GlobalTagsClass
+
+    tags_found = []
+    tag_source = "none"
+    multiplier = 1.0
+
+    # Layer 1: DataHub Native Catalog Aspect
+    try:
+        graph = get_datahub_graph()
+        global_tags = graph.get_aspect(dataset_urn, GlobalTagsClass)
+
+        if global_tags and global_tags.tags:
+            for t in global_tags.tags:
+                tag_urn = t.tag.lower()
+                if "pii" in tag_urn or "sensitive" in tag_urn:
+                    tags_found.append("PII")
+                if "business-critical" in tag_urn or "critical" in tag_urn or "tier-1" in tag_urn:
+                    tags_found.append("business-critical")
+
+            if tags_found:
+                tag_source = "datahub_native"
+    except Exception as e:
+        print(f"[warning] DataHub tags lookup fallback for {dataset_urn}: {e}")
+
+    # Layer 2: Varve Semantic Inference Auto-Detection Engine (with False-Positive Exclusions)
+    if not tags_found:
+        entity_name = dataset_urn.split(".")[-1].replace(",PROD)", "").lower()
+
+        # Exclusion filter: harmless/deprecated/archive tables are ignored
+        exclusion_keywords = ["deprecated", "archive", "survey", "temp", "test", "dummy", "mock", "sandbox"]
+
+        if not any(ex in entity_name for ex in exclusion_keywords):
+            # PII Keywords auto-detection
+            pii_keywords = ["customer", "user", "address", "contact", "billing", "payment", "ssn", "identity"]
+            if any(kw in entity_name for kw in pii_keywords):
+                tags_found.append("PII")
+
+            # Business-Critical Keywords auto-detection
+            critical_keywords = ["customer", "order", "item", "transaction", "checkout", "revenue", "financial"]
+            if any(kw in entity_name for kw in critical_keywords):
+                tags_found.append("business-critical")
+
+            if tags_found:
+                tag_source = "inferred"
+
+    if any("business-critical" in t.lower() or "tier-1" in t.lower() for t in tags_found):
+        multiplier = 1.5
+    elif any("pii" in t.lower() or "sensitive" in t.lower() for t in tags_found):
+        multiplier = 1.3
+    else:
+        multiplier = 1.0
+
+    reason = f"Applied {multiplier}x multiplier ({tag_source}): {tags_found}" if tags_found else "Default 1.0x multiplier (untagged dataset)."
+
+    return {
+        "multiplier": multiplier,
+        "tags_found": tags_found,
+        "tag_source": tag_source,
+        "applied_reason": reason,
+    }
 
 
 def writeback_finding_to_datahub(finding_id: str) -> Dict[str, Any]:

@@ -19,12 +19,12 @@ if not os.path.exists(dotenv_path):
 load_dotenv(dotenv_path)
 
 
-# --- NVIDIA API / StepFun Model selection ---
+# --- NVIDIA API / DeepSeek Model selection ---
 MODEL_INVOKE_URL = os.environ.get(
     "MODEL_INVOKE_URL",
-    "https://integrate.api.nvidia.com/v1/chat/completions",
+    "https://integrate.api.nvidia.com/v1",
 )
-MODEL_NAME = os.environ.get("MODEL_NAME", "stepfun-ai/step-3.7-flash")
+MODEL_NAME = os.environ.get("MODEL_NAME", "deepseek-ai/deepseek-v4-flash")
 MODEL_MAX_TOKENS = int(os.environ.get("MODEL_MAX_TOKENS", "16384"))
 MODEL_TEMPERATURE = float(os.environ.get("MODEL_TEMPERATURE", "1.0"))
 MODEL_TOP_P = float(os.environ.get("MODEL_TOP_P", "0.95"))
