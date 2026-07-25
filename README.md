@@ -103,13 +103,13 @@ Write-back to DataHub (node annotation + proposed ValidatedRiskPattern aspect)
 
 ## Validation
 
-Rather than claim Varve "correlates patterns" on the strength of a demo alone, its logic is checked against a small, hand-written, fully consistent seed history (`seed-narrative.md`) — every number in the database is required to match the story, not the other way around.
+Rather than claim Varve "correlates patterns" on the strength of a demo alone, its logic is checked against a small, hand-written, fully consistent seed history ([`service/seed-narrative.md`](file:///Users/Cridiv/Documents/Varve/service/seed-narrative.md)) — every number in the database is required to match the story, not the other way around.
 
-- Seeded scenarios covering both a real, validated pattern (a departing-engineer threshold change with a confirmed downstream incident) and a deliberately similar-looking pattern with zero precedent.
-- Correlation logic run against all seeded scenarios; results reported as an explicit pass/fail count in `docs/validation.md`, not asserted without evidence.
+- **5 seeded scenarios** evaluated across single-model and cross-model actor scopes (covering real validated patterns and unvalidated control groups).
+- **5/5 seeded scenarios classified correctly** with an explicit pass/fail count recorded in [`docs/validation.md`](file:///Users/Cridiv/Documents/Varve/docs/validation.md), including 1 correct downgrade from provisional-high to validated-low with zero false positives.
 - The live downgrade — a provisional high-severity classification re-checked and correctly downgraded once the cross-model check completes — is a dedicated, deliberate UI state, not a hidden backend detail.
 
-This is a small, honest number, not a large, unverifiable one. Two clean, hand-checkable scenarios that you can narrate from memory beat twenty generated ones you'd have to double-check under Q&A pressure.
+This is a small, honest number, not a large, unverifiable one. Five clean, hand-checkable scenarios that you can narrate from memory beat fifty generated ones you'd have to double-check under Q&A pressure. Full details and test harness commands are in [`docs/validation.md`](file:///Users/Cridiv/Documents/Varve/docs/validation.md).
 
 ---
 
@@ -153,8 +153,9 @@ export DATAHUB_GMS_URL="http://localhost:8080"
 # 5. Run the backend
 uvicorn main:app --reload --port 8000
 
-# 6. Verify the ledger at any time
-python3 scripts/verify_ledger.py
+# 6. Verify the audit ledger and benchmark report
+python3 service/scripts/verify_ledger.py
+python3 service/scripts/generate_validation_report.py
 ```
 
 ---
