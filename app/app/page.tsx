@@ -4,6 +4,7 @@ import LineageArchaeology from "@/components/LineageArchaeology";
 import RiskTriageList from "@/components/RiskTriageList";
 import LedgerVerification from "@/components/LedgerVerification";
 import FAQ from "@/components/FAQ";
+import Footer from "@/components/Footer";
 
 export default function Home() {
   return (
@@ -78,11 +79,8 @@ export default function Home() {
       {/* Frequently Asked Questions Component */}
       <FAQ />
 
-      {/* Minimal Footer */}
-      <footer className="relative z-10 w-full max-w-7xl mx-auto px-6 py-6 text-xs text-zinc-600 flex justify-between items-center border-t border-zinc-900">
-        <div>&copy; {new Date().getFullYear()} Varve Inc.</div>
-        <div className="text-zinc-500">Built with Three.js &amp; GSAP</div>
-      </footer>
+      {/* Comprehensive Professional Footer */}
+      <Footer />
     </div>
   );
 }

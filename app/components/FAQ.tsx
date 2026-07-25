@@ -75,9 +75,8 @@ export default function FAQ() {
                   {faq.question}
                 </span>
                 <span
-                  className={`text-[#9B7FF6] font-mono text-xl transition-transform ${
-                    isOpen ? "rotate-45" : ""
-                  }`}
+                  className={`text-[#9B7FF6] font-mono text-xl transition-transform ${isOpen ? "rotate-45" : ""
+                    }`}
                 >
                   +
                 </span>
