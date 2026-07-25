@@ -27,6 +27,7 @@ from config.config import (
 )
 from db.connection import get_db_connection
 from services.correlation_service import classify_pattern
+from services.ledger_service import append_to_ledger
 
 
 FINDING_PROMPT_TEMPLATE = """You are Varve, an AI Risk & Decision Intelligence Engine for production data pipelines and ML models.
@@ -205,6 +206,45 @@ def populate_findings() -> List[Dict[str, Any]]:
             conn.commit()
 
         fid = str(row["finding_id"]) if row else "existing"
+
+        # B2.2 Ledger events: finding_created, severity_set, downgrade
+        append_to_ledger(
+            event_type="finding_created",
+            finding_id=fid,
+            payload={
+                "model_id": c["model_id"],
+                "related_event_id": eid,
+                "pattern_type": c["pattern_type"],
+                "actor": c["actor"],
+                "narrative": narrative_res["narrative"],
+                "recommended_action": narrative_res["recommended_action"],
+            }
+        )
+
+        append_to_ledger(
+            event_type="severity_set",
+            finding_id=fid,
+            payload={
+                "model_id": c["model_id"],
+                "provisional_severity": c["provisional_severity"],
+                "final_severity": c["severity"],
+                "validated": c["validated"],
+            }
+        )
+
+        if c["provisional_severity"] != c["severity"]:
+            append_to_ledger(
+                event_type="downgrade",
+                finding_id=fid,
+                payload={
+                    "model_id": c["model_id"],
+                    "provisional_severity": c["provisional_severity"],
+                    "final_severity": c["severity"],
+                    "reason": "No historical incident precedent found for pattern",
+                    "validated": False,
+                }
+            )
+
         stored_findings.append({
             "finding_id": fid,
             "event_id": eid,

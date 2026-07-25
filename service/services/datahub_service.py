@@ -17,6 +17,7 @@ if service_dir not in sys.path:
 
 from config.config import DATAHUB_GMS_URL, DATAHUB_GMS_TOKEN
 from db.connection import get_db_connection
+from services.ledger_service import append_to_ledger
 
 from datahub.emitter.mcp import MetadataChangeProposalWrapper
 from datahub.emitter.rest_emitter import DatahubRestEmitter
@@ -120,6 +121,19 @@ def writeback_finding_to_datahub(finding_id: str) -> Dict[str, Any]:
         conn.commit()
 
     print(f"✅ Write-back successful! Updated written_back_at timestamp in database.")
+
+    # B2.2 Ledger event: writeback
+    append_to_ledger(
+        event_type="writeback",
+        finding_id=finding_id,
+        payload={
+            "model_id": finding["model_id"],
+            "dataset_urn": dataset_urn,
+            "annotation_text": annotation_text,
+            "link_url": finding_link_url,
+            "status": "written_back",
+        }
+    )
 
     return {
         "finding_id": finding_id,

@@ -110,6 +110,24 @@ CREATE INDEX idx_findings_status ON findings (status);
 
 
 -- ============================================================
+-- ledger (Phase B Audit Ledger)
+-- Append-only cryptographic hash chain for finding decisions.
+-- ============================================================
+CREATE TABLE ledger (
+    ledger_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    event_type    TEXT NOT NULL,   -- 'finding_created' | 'severity_set' | 'downgrade' | 'writeback' | 'incident_confirmed' | 'incident_dismissed'
+    finding_id    UUID REFERENCES findings(finding_id),
+    payload       JSONB NOT NULL,  -- whatever's relevant to this event type
+    prev_hash     TEXT,            -- hash of the previous row, null for the first row
+    this_hash     TEXT NOT NULL,   -- sha256(prev_hash + event_type + finding_id + payload + created_at)
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_ledger_finding_id ON ledger (finding_id);
+CREATE INDEX idx_ledger_created_at ON ledger (created_at);
+
+
+-- ============================================================
 -- Sanity check: confirm every table exists and is empty
 -- ============================================================
 SELECT 'lineage_events' AS table_name, count(*) FROM lineage_events
@@ -120,4 +138,6 @@ SELECT 'incidents', count(*) FROM incidents
 UNION ALL
 SELECT 'patterns', count(*) FROM patterns
 UNION ALL
-SELECT 'findings', count(*) FROM findings;
+SELECT 'findings', count(*) FROM findings
+UNION ALL
+SELECT 'ledger', count(*) FROM ledger;

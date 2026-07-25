@@ -61,7 +61,7 @@ The distinction between those two entries is the entire point of the system. One
 
 **Correlation is not causation, and Varve says so.** Every finding is framed as a candidate for a human to verify — never as certainty. A pattern with confirmed precedent is ranked higher; a pattern with none is explicitly labeled unvalidated, not hidden or softened into something scarier than it is.
 
-**Every decision is ledgered, not just logged.** Findings, validations, and downgrades are written to an append-only table where each row's hash includes the previous row's hash — a lightweight audit chain. `scripts/verify_ledger.py` walks the chain and confirms nothing was altered after the fact. This exists so "trust the agent's history" isn't a request for faith — it's something you can check yourself, in under a second, from the command line.
+**Every decision is ledgered, not just logged.** Findings, validations, and downgrades are written to an append-only table where each row's hash includes the previous row's hash — a lightweight audit chain. `service/scripts/verify_ledger.py` walks the chain and confirms nothing was altered after the fact. This exists so "trust the agent's history" isn't a request for faith — it's something you can check yourself, in under a second, from the command line.
 
 **Severity composes three DataHub primitives, not just lineage.** A pattern that touches a node tagged `PII` or `business-critical` in DataHub's own governance metadata is weighted higher than the identical pattern on an untagged node. Ownership metadata auto-routes every finding to the actual owning team at creation time — no manual "who even owns this" lookup.
 

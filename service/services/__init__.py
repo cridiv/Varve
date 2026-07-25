@@ -19,6 +19,10 @@ from .datahub_service import (
     writeback_finding_to_datahub,
     confirm_datahub_annotation,
 )
+from .ledger_service import (
+    append_to_ledger,
+    verify_ledger_chain,
+)
 
 __all__ = [
     "get_matching_incidents_for_event",
@@ -32,4 +36,6 @@ __all__ = [
     "verify_findings_table",
     "writeback_finding_to_datahub",
     "confirm_datahub_annotation",
+    "append_to_ledger",
+    "verify_ledger_chain",
 ]
