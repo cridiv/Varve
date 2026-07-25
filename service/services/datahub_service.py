@@ -233,8 +233,25 @@ def writeback_finding_to_datahub(finding_id: str) -> Dict[str, Any]:
         createStamp=audit_stamp,
     )
 
+    # Idempotent Aspect Update: fetch existing aspect and replace matching finding URL
+    existing_elements = []
+    try:
+        graph = get_datahub_graph()
+        existing_aspect = graph.get_aspect(
+            entity_urn=dataset_urn,
+            aspect_type=InstitutionalMemoryClass,
+        )
+        if existing_aspect and existing_aspect.elements:
+            for elem in existing_aspect.elements:
+                if elem.url != finding_link_url and f"/findings/{finding_id}" not in elem.url:
+                    existing_elements.append(elem)
+    except Exception as e:
+        print(f"[warning] Could not fetch existing InstitutionalMemory aspect for {dataset_urn}: {e}")
+
+    existing_elements.append(memory_element)
+
     memory_aspect = InstitutionalMemoryClass(
-        elements=[memory_element]
+        elements=existing_elements
     )
 
     mcp = MetadataChangeProposalWrapper(

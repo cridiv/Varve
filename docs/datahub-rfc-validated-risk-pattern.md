@@ -2,7 +2,7 @@
 
 **Status:** Proposal + reference implementation (built as part of Varve, submitted to
 the DataHub Agent Hackathon, Production ML Agents track)
-**Author:** [your name]
+**Author:** Aderemi Ademola
 **Related:** `docs/validation.md`, `service/services/correlation_service.py`
 
 ---
