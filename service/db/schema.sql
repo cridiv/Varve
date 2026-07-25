@@ -74,11 +74,12 @@ CREATE INDEX idx_incidents_root_cause_event_id ON incidents (root_cause_event_id
 CREATE TABLE patterns (
     pattern_id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     pattern_type           TEXT NOT NULL,          -- 'departing_engineer_change' | 'stale_threshold' | 'orphaned_experiment' | 'reactive_fix'
-    scope_key              TEXT NOT NULL,          -- model_id URN, actor name (e.g. 'J. Alvarez'), or 'org_wide'
+    scope_key              TEXT NOT NULL,          -- model_id URN, actor name (e.g. 'J. Alvarez'), 'org_wide', or 'industry_general'
     times_observed         INTEGER NOT NULL DEFAULT 0,
     times_preceded_incident INTEGER NOT NULL DEFAULT 0,
     avg_detection_lag_days NUMERIC DEFAULT 0,
-    last_updated           TIMESTAMPTZ NOT NULL DEFAULT now()
+    last_updated           TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT unique_scope_pattern UNIQUE (scope_key, pattern_type)
 );
 
 CREATE INDEX idx_patterns_scope_key ON patterns (scope_key);
@@ -96,6 +97,7 @@ CREATE TABLE findings (
     related_event_id    UUID REFERENCES lineage_events(event_id),
     severity            TEXT NOT NULL DEFAULT 'medium',  -- 'high' | 'medium' | 'low'
     validated           BOOLEAN NOT NULL DEFAULT FALSE,   -- true if a real incident precedent was found
+    evidence_scope      TEXT NOT NULL DEFAULT 'org_wide', -- 'model' | 'actor' | 'org_wide' | 'industry_general'
     narrative            TEXT,                             -- Claude-generated explanation
     recommended_action   TEXT,                             -- Claude-generated
     status               TEXT NOT NULL DEFAULT 'open',     -- 'open' | 'reviewed' | 'resolved' | 'dismissed'
@@ -107,6 +109,7 @@ CREATE TABLE findings (
 CREATE INDEX idx_findings_model_id ON findings (model_id);
 CREATE INDEX idx_findings_severity ON findings (severity);
 CREATE INDEX idx_findings_status ON findings (status);
+CREATE INDEX idx_findings_evidence_scope ON findings (evidence_scope);
 
 
 -- ============================================================

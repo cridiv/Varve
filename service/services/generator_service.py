@@ -162,10 +162,11 @@ def populate_findings() -> List[Dict[str, Any]]:
                 related_event_id,
                 severity,
                 validated,
+                evidence_scope,
                 narrative,
                 recommended_action,
                 status
-            ) VALUES (%s, %s, %s, %s, %s, %s, 'open')
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'open')
             ON CONFLICT DO NOTHING
             RETURNING finding_id, created_at;
         """
@@ -180,6 +181,7 @@ def populate_findings() -> List[Dict[str, Any]]:
                         UPDATE findings SET
                             severity = %s,
                             validated = %s,
+                            evidence_scope = %s,
                             narrative = %s,
                             recommended_action = %s
                         WHERE related_event_id = %s
@@ -188,6 +190,7 @@ def populate_findings() -> List[Dict[str, Any]]:
                     cur.execute(update_sql, (
                         c["severity"],
                         c["validated"],
+                        c["scope_key"],
                         narrative_res["narrative"],
                         narrative_res["recommended_action"],
                         eid,
@@ -199,6 +202,7 @@ def populate_findings() -> List[Dict[str, Any]]:
                         eid,
                         c["severity"],
                         c["validated"],
+                        c["scope_key"],
                         narrative_res["narrative"],
                         narrative_res["recommended_action"],
                     ))
@@ -216,6 +220,7 @@ def populate_findings() -> List[Dict[str, Any]]:
                 "related_event_id": eid,
                 "pattern_type": c["pattern_type"],
                 "actor": c["actor"],
+                "evidence_scope": c["scope_key"],
                 "narrative": narrative_res["narrative"],
                 "recommended_action": narrative_res["recommended_action"],
             }

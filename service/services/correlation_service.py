@@ -152,9 +152,99 @@ def _derive_pattern_type(
         return "documented_change"
 
 
+def resolve_pattern_severity_by_trust_scope(
+    pattern_type: str,
+    actor: Optional[str],
+    direct_incidents: List[Dict[str, Any]],
+    cross_model_incidents: List[Dict[str, Any]],
+    provisional_severity: str,
+) -> Dict[str, Any]:
+    """
+    D1.4 Trust Hierarchy Scope Resolution:
+    Checks pattern scopes in strict trust order:
+      1. Direct per-model incident match
+      2. Cross-model per-actor incident match
+      3. org_wide pattern rollup
+      4. actor pattern rollup
+      5. industry_general baseline fallback
+
+    Only falls through to a lower-trust scope if higher-trust scopes have 0 observations.
+    """
+    # 1 & 2: Direct empirical org incidents always take top priority
+    if direct_incidents or cross_model_incidents:
+        scope = "model" if direct_incidents else "actor"
+        return {
+            "severity": provisional_severity,
+            "validated": True,
+            "scope_key": scope,
+            "fallback_used": False,
+            "resolution_reason": f"Direct org incident precedent found at {scope} scope."
+        }
+
+    # 3, 4, 5: Consult patterns table in trust hierarchy order
+    scopes_to_check = ["org_wide"]
+    if actor:
+        scopes_to_check.append(actor)
+    scopes_to_check.append("industry_general")
+
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            for scope in scopes_to_check:
+                cur.execute("""
+                    SELECT times_observed, times_preceded_incident, avg_detection_lag_days
+                    FROM patterns
+                    WHERE scope_key = %s AND pattern_type = %s;
+                """, (scope, pattern_type))
+                row = cur.fetchone()
+
+                if row and row["times_observed"] > 0:
+                    times_obs = row["times_observed"]
+                    times_inc = row["times_preceded_incident"]
+                    has_precedent = times_inc > 0
+
+                    if scope == "industry_general":
+                        base_rate = times_inc / float(times_obs) if times_obs > 0 else 0.0
+                        # Industry base-rate threshold evaluation:
+                        # - Base rate >= 0.25 (High Industry Risk): retain provisional severity
+                        # - Base rate 0.15 .. 0.24 (Moderate Industry Risk): cap severity at MEDIUM
+                        # - Base rate < 0.15 (Low Industry Risk): downgrade severity to LOW
+                        if base_rate >= 0.25:
+                            sev = provisional_severity
+                        elif base_rate >= 0.15:
+                            sev = "medium" if provisional_severity == "high" else provisional_severity
+                        else:
+                            sev = "low"
+
+                        return {
+                            "severity": sev,
+                            "validated": False,
+                            "scope_key": "industry_general",
+                            "fallback_used": True,
+                            "resolution_reason": f"No org incident history found; evaluated industry baseline rate ({times_inc}/{times_obs} = {base_rate:.0%} risk precedence -> severity={sev.upper()})."
+                        }
+                    else:
+                        # Higher-trust org scope found with observations
+                        sev = provisional_severity if has_precedent else "low"
+                        return {
+                            "severity": sev,
+                            "validated": has_precedent,
+                            "scope_key": scope,
+                            "fallback_used": False,
+                            "resolution_reason": f"Resolved via {scope} pattern history ({times_inc}/{times_obs} incidents)."
+                        }
+
+    return {
+        "severity": "low",
+        "validated": False,
+        "scope_key": "default_unvalidated",
+        "fallback_used": False,
+        "resolution_reason": "No pattern observations found at any scope."
+    }
+
+
 def classify_pattern(event_id: str) -> Dict[str, Any]:
     """
-    Two-step severity classification using both per-model and cross-model actor-level incident checks.
+    Two-step severity classification using trust hierarchy scope resolution (org_wide -> actor -> industry_general).
     """
     event_query = """
         SELECT event_id, model_id, node_type, actor, event_timestamp,
@@ -187,18 +277,24 @@ def classify_pattern(event_id: str) -> Dict[str, Any]:
             if str(r["origin_event_id"]) != event_id
         ]
 
-    # Validation decision
-    is_validated = len(direct_incidents) > 0 or len(cross_model_incidents) > 0
+    # Initial validation boolean
+    is_validated_direct = len(direct_incidents) > 0 or len(cross_model_incidents) > 0
     cross_model_validated = len(cross_model_incidents) > 0
-
-    # Step 2 — Final severity (downgrade if no empirical precedent)
-    final_severity = provisional if is_validated else "low"
 
     pattern_type = _derive_pattern_type(
         event["node_type"],
         bool(event.get("actor_departed_within_90d")),
         event["documentation_present"],
-        is_validated,
+        is_validated_direct,
+    )
+
+    # Step 2 — Final severity & validation resolution via trust hierarchy
+    resolution = resolve_pattern_severity_by_trust_scope(
+        pattern_type=pattern_type,
+        actor=event["actor"],
+        direct_incidents=direct_incidents,
+        cross_model_incidents=cross_model_incidents,
+        provisional_severity=provisional,
     )
 
     return {
@@ -209,9 +305,12 @@ def classify_pattern(event_id: str) -> Dict[str, Any]:
         "actor_departed_within_90d": bool(event.get("actor_departed_within_90d")),
         "pattern_type": pattern_type,
         "provisional_severity": provisional,
-        "validated": is_validated,
+        "validated": resolution["validated"],
         "cross_model_validated": cross_model_validated,
-        "severity": final_severity,
+        "severity": resolution["severity"],
+        "scope_key": resolution["scope_key"],
+        "fallback_used": resolution["fallback_used"],
+        "resolution_reason": resolution["resolution_reason"],
         "matched_incidents": direct_incidents,
         "cross_model_incidents": cross_model_incidents,
         "incident_count": len(direct_incidents),
@@ -237,7 +336,7 @@ def populate_patterns() -> None:
         c = classify_pattern(str(ev["event_id"]))
         classifications.append(c)
 
-    scope_stats: Dict[str, Dict[str, Any]] = {}
+    scope_stats: Dict[Tuple[str, str], Dict[str, Any]] = {}
 
     for c in classifications:
         lags = []
@@ -245,16 +344,20 @@ def populate_patterns() -> None:
             if inc.get("detection_lag_days") is not None:
                 lags.append(float(inc["detection_lag_days"]))
 
-        def _init_scope():
-            return {"times_observed": 0, "times_preceded_incident": 0, "lag_days": [], "pattern_type": c["pattern_type"]}
-
         for scope_key in [c["model_id"], c["actor"] or "unknown", "org_wide"]:
-            if scope_key not in scope_stats:
-                scope_stats[scope_key] = _init_scope()
-            scope_stats[scope_key]["times_observed"] += 1
+            key = (scope_key, c["pattern_type"])
+            if key not in scope_stats:
+                scope_stats[key] = {
+                    "scope_key": scope_key,
+                    "pattern_type": c["pattern_type"],
+                    "times_observed": 0,
+                    "times_preceded_incident": 0,
+                    "lag_days": [],
+                }
+            scope_stats[key]["times_observed"] += 1
             if c["validated"]:
-                scope_stats[scope_key]["times_preceded_incident"] += 1
-                scope_stats[scope_key]["lag_days"].extend(lags)
+                scope_stats[key]["times_preceded_incident"] += 1
+                scope_stats[key]["lag_days"].extend(lags)
 
     upsert_sql = """
         INSERT INTO patterns (pattern_type, scope_key, times_observed, times_preceded_incident, avg_detection_lag_days, last_updated)
@@ -269,14 +372,14 @@ def populate_patterns() -> None:
 
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            for scope_key, stats in scope_stats.items():
+            for (scope_key, p_type), stats in scope_stats.items():
                 avg_lag = (
                     sum(stats["lag_days"]) / len(stats["lag_days"])
                     if stats["lag_days"] else 0.0
                 )
                 cur.execute(upsert_sql, (
                     stats["pattern_type"],
-                    scope_key,
+                    stats["scope_key"],
                     stats["times_observed"],
                     stats["times_preceded_incident"],
                     round(avg_lag, 1),

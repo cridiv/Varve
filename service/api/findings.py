@@ -9,6 +9,14 @@ from services.datahub_service import writeback_finding_to_datahub, confirm_datah
 router = APIRouter(tags=["findings"])
 
 
+EVIDENCE_LABELS = {
+    "model": "Backed by direct model incident history",
+    "actor": "Backed by engineer cross-model incident history",
+    "org_wide": "Backed by company-wide pattern history",
+    "industry_general": "Backed by published industry data (Cold-start fallback)",
+}
+
+
 @router.get("/models/risk-ranking")
 def get_risk_ranking():
     """
@@ -21,6 +29,7 @@ def get_risk_ranking():
             f.model_id,
             f.severity,
             f.validated,
+            f.evidence_scope,
             f.status,
             f.narrative,
             f.recommended_action,
@@ -45,6 +54,7 @@ def get_risk_ranking():
     for r in rows:
         urn_parts = r["model_id"].split(".")
         display_name = urn_parts[-1].replace(",PROD)", "") if urn_parts else r["model_id"]
+        ev_scope = r.get("evidence_scope", "org_wide")
         
         rankings.append({
             "finding_id": str(r["finding_id"]),
@@ -52,6 +62,8 @@ def get_risk_ranking():
             "model_name": display_name,
             "severity": r["severity"],
             "validated": r["validated"],
+            "evidence_scope": ev_scope,
+            "evidence_label": EVIDENCE_LABELS.get(ev_scope, "Backed by company-wide pattern history"),
             "status": r["status"],
             "actor": r["actor"],
             "node_type": r["node_type"],
@@ -76,6 +88,7 @@ def get_finding_detail(finding_id: str):
             f.model_id,
             f.severity,
             f.validated,
+            f.evidence_scope,
             f.narrative,
             f.recommended_action,
             f.status,
@@ -132,6 +145,7 @@ def get_finding_detail(finding_id: str):
 
     urn_parts = finding["model_id"].split(".")
     display_name = urn_parts[-1].replace(",PROD)", "") if urn_parts else finding["model_id"]
+    ev_scope = finding.get("evidence_scope", "org_wide")
 
     return {
         "finding_id": str(finding["finding_id"]),
@@ -139,6 +153,8 @@ def get_finding_detail(finding_id: str):
         "model_name": display_name,
         "severity": finding["severity"],
         "validated": finding["validated"],
+        "evidence_scope": ev_scope,
+        "evidence_label": EVIDENCE_LABELS.get(ev_scope, "Backed by company-wide pattern history"),
         "status": finding["status"],
         "narrative": finding["narrative"],
         "recommended_action": finding["recommended_action"],

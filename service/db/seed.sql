@@ -204,4 +204,20 @@ BEGIN
     ('urn:li:dataset:(urn:li:dataPlatform:dbt,b2fd91.order_entry_db.order_entry.countries,PROD)', 'schema_validity_score', 100.0, '2026-07-02 00:00:00+00'),
     ('urn:li:dataset:(urn:li:dataPlatform:dbt,b2fd91.order_entry_db.order_entry.countries,PROD)', 'schema_validity_score', 100.0, '2026-07-15 00:00:00+00');
 
+    -- ============================================================
+    -- 4. INDUSTRY GENERAL BASELINE PATTERNS (Phase D1.3 Cold-Start)
+    -- ============================================================
+    INSERT INTO patterns (pattern_type, scope_key, times_observed, times_preceded_incident, avg_detection_lag_days, last_updated)
+    VALUES
+    ('departing_engineer_change', 'industry_general', 10, 3, 14.0, NOW()),
+    ('stale_threshold',           'industry_general', 20, 5, 9.5,  NOW()),
+    ('unreviewed_change',         'industry_general', 20, 3, 7.0,  NOW()),
+    ('orphaned_experiment',       'industry_general', 10, 1, 21.0, NOW())
+    ON CONFLICT (scope_key, pattern_type)
+    DO UPDATE SET
+        times_observed          = EXCLUDED.times_observed,
+        times_preceded_incident = EXCLUDED.times_preceded_incident,
+        avg_detection_lag_days  = EXCLUDED.avg_detection_lag_days,
+        last_updated            = NOW();
+
 END $$;
