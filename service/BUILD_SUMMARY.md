@@ -2,7 +2,7 @@
 
 **Project:** AI Risk & Decision Intelligence Platform for production data pipelines  
 **Backend:** Python 3.11, FastAPI, PostgreSQL 16 (Docker), `acryl-datahub`  
-**LLM:** `stepfun-ai/step-3.7-flash` via NVIDIA API  
+**LLM:** `deepseek-ai/deepseek-v4-flash` via NVIDIA API (with 2-worker parallel reasoning)  
 **DataHub:** Local GMS at `http://localhost:8080` (showcase-ecommerce sample)
 
 > **"Every claim Varve makes carries a visible label for how much you should trust it, and every one of those labels is independently checkable."**

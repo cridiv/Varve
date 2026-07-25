@@ -123,6 +123,7 @@ def run_full_e2e_verification():
                 cur.execute("""
                     INSERT INTO patterns (scope_key, pattern_type, times_observed, times_preceded_incident) VALUES
                     ('industry_general', 'test_high_risk_pattern', 100, 30),
+                    ('industry_general', 'test_moderate_risk_pattern', 100, 20),
                     ('industry_general', 'test_low_risk_pattern', 100, 10)
                     ON CONFLICT (scope_key, pattern_type) DO UPDATE SET
                         times_observed = EXCLUDED.times_observed,
@@ -139,7 +140,16 @@ def run_full_e2e_verification():
         assert stale_res["severity"] == "high"
         assert stale_res["scope_key"] == "industry_general"
 
-        # Test 2: Industry general base rate < 15% (10%) -> Downgraded to LOW
+        # Test 2: Industry general base rate 15-24% (20%) -> Severity capped at MEDIUM
+        mod_res = resolve_pattern_severity_by_trust_scope(
+            pattern_type="test_moderate_risk_pattern",
+            actor="Unknown Actor",
+            provisional_severity="high",
+        )
+        assert mod_res["severity"] == "medium"
+        assert mod_res["scope_key"] == "industry_general"
+
+        # Test 3: Industry general base rate < 15% (10%) -> Downgraded to LOW
         exp_res = resolve_pattern_severity_by_trust_scope(
             pattern_type="test_low_risk_pattern",
             actor="Unknown Actor",
@@ -148,7 +158,7 @@ def run_full_e2e_verification():
         assert exp_res["severity"] == "low"
         assert exp_res["scope_key"] == "industry_general"
 
-        print("  ✔ Base rate thresholds verified: 30% retained provisional HIGH, 10% correctly downgraded to LOW.")
+        print("  ✔ Base rate 3-tier thresholds verified: 30% retained HIGH, 20% capped at MEDIUM, 10% downgraded to LOW.")
         phase_results["Phase 4 — Cold-Start & Fallback Tiers"] = "PASS"
     except Exception as e:
         print(f"  ❌ Phase 4 Failed: {e}")
@@ -246,7 +256,7 @@ def run_full_e2e_verification():
     # --------------------------------------------------------------------------
     # PHASE 7: LLM Synthesis Quality Check
     # --------------------------------------------------------------------------
-    print("\n► PHASE 7: Populating Findings & Validating NVIDIA StepFun LLM Synthesis...")
+    print("\n► PHASE 7: Populating Findings & Validating NVIDIA DeepSeek v4 Flash LLM Synthesis...")
     try:
         findings = populate_findings()
         assert len(findings) >= 5, "Should generate findings for all lineage events!"
@@ -255,7 +265,7 @@ def run_full_e2e_verification():
         assert "narrative" in sample_finding and len(sample_finding["narrative"]) > 20
         assert "recommended_action" in sample_finding and len(sample_finding["recommended_action"]) > 20
 
-        print(f"  ✔ Generated {len(findings)} findings via NVIDIA StepFun LLM.")
+        print(f"  ✔ Generated {len(findings)} findings via NVIDIA DeepSeek v4 Flash LLM.")
         print(f"  ✔ Sample Narrative: '{sample_finding['narrative'][:80]}...'")
         print(f"  ✔ Sample Action:    '{sample_finding['recommended_action'][:80]}...'")
         phase_results["Phase 7 — LLM Synthesis Quality"] = "PASS"

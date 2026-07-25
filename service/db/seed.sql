@@ -206,13 +206,17 @@ BEGIN
 
     -- ============================================================
     -- 4. INDUSTRY GENERAL BASELINE PATTERNS (Phase D1.3 Cold-Start)
+    -- 3-Tier Base Rate Thresholds:
+    -- - >= 25% (High Risk): 30% (3/10) -> Retains provisional HIGH
+    -- - 15% - 24.9% (Moderate Risk): 20% (4/20) -> Capped at MEDIUM
+    -- - < 15% (Low Risk): 10% (1/10) -> Downgraded to LOW
     -- ============================================================
     INSERT INTO patterns (pattern_type, scope_key, times_observed, times_preceded_incident, avg_detection_lag_days, last_updated)
     VALUES
-    ('departing_engineer_change', 'industry_general', 10, 3, 14.0, NOW()),
-    ('stale_threshold',           'industry_general', 20, 5, 9.5,  NOW()),
-    ('unreviewed_change',         'industry_general', 20, 3, 7.0,  NOW()),
-    ('orphaned_experiment',       'industry_general', 10, 1, 21.0, NOW())
+    ('departing_engineer_change', 'industry_general', 10, 3, 14.0, NOW()),  -- 30% -> High
+    ('stale_threshold',           'industry_general', 20, 5, 9.5,  NOW()),  -- 25% -> High
+    ('unreviewed_change',         'industry_general', 20, 4, 7.0,  NOW()),  -- 20% -> Capped at Medium
+    ('orphaned_experiment',       'industry_general', 10, 1, 21.0, NOW())   -- 10% -> Downgraded to Low
     ON CONFLICT (scope_key, pattern_type)
     DO UPDATE SET
         times_observed          = EXCLUDED.times_observed,
