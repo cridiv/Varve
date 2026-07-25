@@ -30,6 +30,7 @@ def get_risk_ranking():
             f.severity,
             f.validated,
             f.evidence_scope,
+            f.routed_to_team,
             f.status,
             f.narrative,
             f.recommended_action,
@@ -64,6 +65,7 @@ def get_risk_ranking():
             "validated": r["validated"],
             "evidence_scope": ev_scope,
             "evidence_label": EVIDENCE_LABELS.get(ev_scope, "Backed by company-wide pattern history"),
+            "routed_to_team": r.get("routed_to_team", "Ian Chen (Director of Data Engineering)"),
             "status": r["status"],
             "actor": r["actor"],
             "node_type": r["node_type"],
@@ -74,6 +76,69 @@ def get_risk_ranking():
         })
 
     return rankings
+
+
+@router.get("/findings/by-team/{team}")
+def get_findings_by_team(team: str):
+    """
+    E1.3 Returns all findings routed to a specific team or owner name.
+    Supports case-insensitive partial matching (e.g. 'jonny1', 'patrick1', 'Ian Chen').
+    """
+    query = """
+        SELECT 
+            f.finding_id,
+            f.model_id,
+            f.severity,
+            f.validated,
+            f.evidence_scope,
+            f.routed_to_team,
+            f.status,
+            f.narrative,
+            f.recommended_action,
+            f.written_back_at,
+            f.created_at,
+            e.actor,
+            e.node_type,
+            e.event_timestamp
+        FROM findings f
+        JOIN lineage_events e ON f.related_event_id = e.event_id
+        WHERE LOWER(f.routed_to_team) LIKE LOWER(%s)
+        ORDER BY 
+            CASE WHEN f.severity = 'high' THEN 1 ELSE 2 END,
+            f.validated DESC,
+            f.created_at DESC;
+    """
+    search_term = f"%{team}%"
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(query, (search_term,))
+            rows = [dict(r) for r in cur.fetchall()]
+
+    team_findings = []
+    for r in rows:
+        urn_parts = r["model_id"].split(".")
+        display_name = urn_parts[-1].replace(",PROD)", "") if urn_parts else r["model_id"]
+        ev_scope = r.get("evidence_scope", "org_wide")
+
+        team_findings.append({
+            "finding_id": str(r["finding_id"]),
+            "model_id": r["model_id"],
+            "model_name": display_name,
+            "severity": r["severity"],
+            "validated": r["validated"],
+            "evidence_scope": ev_scope,
+            "evidence_label": EVIDENCE_LABELS.get(ev_scope, "Backed by company-wide pattern history"),
+            "routed_to_team": r.get("routed_to_team", "Ian Chen (Director of Data Engineering)"),
+            "status": r["status"],
+            "actor": r["actor"],
+            "node_type": r["node_type"],
+            "event_timestamp": r["event_timestamp"].isoformat() if r["event_timestamp"] else None,
+            "summary": r["narrative"],
+            "recommended_action": r["recommended_action"],
+            "written_back": r["written_back_at"] is not None,
+        })
+
+    return team_findings
 
 
 @router.get("/findings/{finding_id}")
@@ -89,6 +154,7 @@ def get_finding_detail(finding_id: str):
             f.severity,
             f.validated,
             f.evidence_scope,
+            f.routed_to_team,
             f.narrative,
             f.recommended_action,
             f.status,
@@ -155,6 +221,7 @@ def get_finding_detail(finding_id: str):
         "validated": finding["validated"],
         "evidence_scope": ev_scope,
         "evidence_label": EVIDENCE_LABELS.get(ev_scope, "Backed by company-wide pattern history"),
+        "routed_to_team": finding.get("routed_to_team", "Ian Chen (Director of Data Engineering)"),
         "status": finding["status"],
         "narrative": finding["narrative"],
         "recommended_action": finding["recommended_action"],

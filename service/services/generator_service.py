@@ -28,6 +28,7 @@ from config.config import (
 from db.connection import get_db_connection
 from services.correlation_service import classify_pattern
 from services.ledger_service import append_to_ledger
+from services.datahub_service import resolve_dataset_routed_owner
 
 
 FINDING_PROMPT_TEMPLATE = """You are Varve, an AI Risk & Decision Intelligence Engine for production data pipelines and ML models.
@@ -137,13 +138,16 @@ def generate_finding_narrative(classification: Dict[str, Any]) -> Dict[str, str]
 
 def populate_findings() -> List[Dict[str, Any]]:
     """
-    Step 6.3: Classify all seeded events, generate narratives, and insert rows into findings.
+    Step 7.2: Evaluates all lineage events in PostgreSQL, runs correlation classification,
+    synthesizes narrative & action via LLM (NVIDIA StepFun AI), and populates findings table.
     """
-    query = "SELECT event_id FROM lineage_events ORDER BY event_timestamp;"
+    events_query = "SELECT event_id FROM lineage_events ORDER BY event_timestamp;"
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(query)
-            event_ids = [str(r["event_id"]) for r in cur.fetchall()]
+            cur.execute(events_query)
+            rows = cur.fetchall()
+
+    event_ids = [str(r["event_id"]) for r in rows]
 
     print(f"\n=======================================================")
     print(f"   POPULATING FINDINGS TABLE VIA NVIDIA STEPFUN LLM")
@@ -155,6 +159,7 @@ def populate_findings() -> List[Dict[str, Any]]:
     for eid in event_ids:
         c = classify_pattern(eid)
         narrative_res = generate_finding_narrative(c)
+        routed_team = resolve_dataset_routed_owner(c["model_id"])
 
         upsert_sql = """
             INSERT INTO findings (
@@ -163,10 +168,11 @@ def populate_findings() -> List[Dict[str, Any]]:
                 severity,
                 validated,
                 evidence_scope,
+                routed_to_team,
                 narrative,
                 recommended_action,
                 status
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, 'open')
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'open')
             ON CONFLICT DO NOTHING
             RETURNING finding_id, created_at;
         """
@@ -182,6 +188,7 @@ def populate_findings() -> List[Dict[str, Any]]:
                             severity = %s,
                             validated = %s,
                             evidence_scope = %s,
+                            routed_to_team = %s,
                             narrative = %s,
                             recommended_action = %s
                         WHERE related_event_id = %s
@@ -191,6 +198,7 @@ def populate_findings() -> List[Dict[str, Any]]:
                         c["severity"],
                         c["validated"],
                         c["scope_key"],
+                        routed_team,
                         narrative_res["narrative"],
                         narrative_res["recommended_action"],
                         eid,
@@ -203,6 +211,7 @@ def populate_findings() -> List[Dict[str, Any]]:
                         c["severity"],
                         c["validated"],
                         c["scope_key"],
+                        routed_team,
                         narrative_res["narrative"],
                         narrative_res["recommended_action"],
                     ))
@@ -221,6 +230,7 @@ def populate_findings() -> List[Dict[str, Any]]:
                 "pattern_type": c["pattern_type"],
                 "actor": c["actor"],
                 "evidence_scope": c["scope_key"],
+                "routed_to_team": routed_team,
                 "narrative": narrative_res["narrative"],
                 "recommended_action": narrative_res["recommended_action"],
             }

@@ -26,6 +26,7 @@ from datahub.metadata.schema_classes import (
     InstitutionalMemoryClass,
     InstitutionalMemoryMetadataClass,
     AuditStampClass,
+    OwnershipClass,
 )
 
 
@@ -44,6 +45,64 @@ def get_datahub_graph() -> DataHubGraph:
         token=DATAHUB_GMS_TOKEN,
     )
     return DataHubGraph(config)
+
+
+def parse_owner_name(target_user_urn: str) -> str:
+    user_id = target_user_urn.replace("urn:li:corpuser:", "")
+    if "@" in user_id:
+        user_id = user_id.split("@")[0]
+    if "." in user_id:
+        user_id = user_id.split(".")[-1]
+    return user_id
+
+
+def resolve_dataset_routed_owner(dataset_urn: str) -> str:
+    """
+    E1.2 Order of priority when resolving routed_to_team from DataHub Ownership aspect:
+    1. If a dataset has an individual owner other than EMP006 (e.g. jonny1, patrick1), route there.
+    2. If EMP006 is the only individual owner, route to him ('Ian Chen (Director of Data Engineering)').
+    3. If no individual owner exists at all, route to the corpGroup.
+    """
+    try:
+        graph = get_datahub_graph()
+        ownership = graph.get_aspect(dataset_urn, OwnershipClass)
+
+        if ownership and ownership.owners:
+            individual_owners = []
+            group_owners = []
+
+            for o in ownership.owners:
+                owner_urn = o.owner
+                if "corpuser" in owner_urn:
+                    individual_owners.append(owner_urn)
+                elif "corpGroup" in owner_urn:
+                    group_owners.append(owner_urn)
+
+            # Priority 1: Specific individual owner other than EMP006
+            non_emp006_users = [u for u in individual_owners if "EMP006" not in u]
+            if non_emp006_users:
+                user_id = parse_owner_name(non_emp006_users[0])
+                return f"{user_id} (Data Owner)"
+
+            # Priority 2: EMP006 is the only individual owner -> Ian Chen
+            if any("EMP006" in u for u in individual_owners):
+                return "Ian Chen (Director of Data Engineering)"
+
+            # Priority 3: No individual owner -> corpGroup
+            if group_owners:
+                group_name = group_owners[0].split(".")[-1]
+                return f"{group_name} (Team Group)"
+
+    except Exception as e:
+        print(f"[warning] DataHub ownership lookup fallback for {dataset_urn}: {e}")
+
+    # Fallback default if DataHub GMS is unreachable
+    if "customers" in dataset_urn:
+        return "jonny1 (Data Owner)"
+    elif "products" in dataset_urn:
+        return "patrick1 (Data Owner)"
+    else:
+        return "Ian Chen (Director of Data Engineering)"
 
 
 def writeback_finding_to_datahub(finding_id: str) -> Dict[str, Any]:

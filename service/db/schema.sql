@@ -36,12 +36,14 @@ CREATE TABLE business_metrics (
     model_id      TEXT NOT NULL,
     metric_name   TEXT NOT NULL,     -- e.g. 'accuracy', 'churn_rate'
     value         NUMERIC NOT NULL,
+    is_anomaly    BOOLEAN NOT NULL DEFAULT FALSE,
     recorded_at   TIMESTAMPTZ NOT NULL,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX idx_business_metrics_model_id ON business_metrics (model_id);
 CREATE INDEX idx_business_metrics_recorded_at ON business_metrics (recorded_at);
+CREATE INDEX idx_business_metrics_is_anomaly ON business_metrics (is_anomaly);
 
 
 -- ============================================================
@@ -98,6 +100,7 @@ CREATE TABLE findings (
     severity            TEXT NOT NULL DEFAULT 'medium',  -- 'high' | 'medium' | 'low'
     validated           BOOLEAN NOT NULL DEFAULT FALSE,   -- true if a real incident precedent was found
     evidence_scope      TEXT NOT NULL DEFAULT 'org_wide', -- 'model' | 'actor' | 'org_wide' | 'industry_general'
+    routed_to_team      TEXT NOT NULL DEFAULT 'Ian Chen', -- auto-routed owner resolved from DataHub ownership aspect
     narrative            TEXT,                             -- Claude-generated explanation
     recommended_action   TEXT,                             -- Claude-generated
     status               TEXT NOT NULL DEFAULT 'open',     -- 'open' | 'reviewed' | 'resolved' | 'dismissed'
@@ -110,6 +113,7 @@ CREATE INDEX idx_findings_model_id ON findings (model_id);
 CREATE INDEX idx_findings_severity ON findings (severity);
 CREATE INDEX idx_findings_status ON findings (status);
 CREATE INDEX idx_findings_evidence_scope ON findings (evidence_scope);
+CREATE INDEX idx_findings_routed_to_team ON findings (routed_to_team);
 
 
 -- ============================================================
@@ -128,6 +132,25 @@ CREATE TABLE ledger (
 
 CREATE INDEX idx_ledger_finding_id ON ledger (finding_id);
 CREATE INDEX idx_ledger_created_at ON ledger (created_at);
+
+
+-- ============================================================
+-- candidate_incidents (Phase D2.3 - D2.5 Candidate Incident Discovery)
+-- ============================================================
+CREATE TABLE candidate_incidents (
+    candidate_id         TEXT PRIMARY KEY,
+    model_id            TEXT NOT NULL,
+    anomaly_metric      TEXT NOT NULL,
+    anomaly_value       NUMERIC NOT NULL,
+    anomaly_date        TIMESTAMPTZ NOT NULL,
+    candidate_event_id  UUID REFERENCES lineage_events(event_id),
+    days_between        NUMERIC NOT NULL,
+    status              TEXT NOT NULL DEFAULT 'unconfirmed', -- 'unconfirmed' | 'confirmed' | 'dismissed'
+    proposed_description TEXT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_candidate_incidents_status ON candidate_incidents (status);
 
 
 -- ============================================================
