@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import { fetchRiskRankings, triggerWriteback, getRelativeTimeString } from "@/lib/api";
 
 interface Finding {
@@ -279,7 +280,16 @@ export default function RiskTriageList() {
 
                   <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800">
                     <div className="text-[10px] text-zinc-500 uppercase">Actor Lineage</div>
-                    <div className="text-xs font-semibold text-zinc-200 truncate mt-1">{selectedFinding.actor}</div>
+                    {selectedFinding.actor && selectedFinding.actor !== "Unknown" ? (
+                      <Link
+                        href={`/actors?actor=${encodeURIComponent(selectedFinding.actor)}`}
+                        className="text-xs font-mono font-bold text-indigo-300 hover:text-white underline block truncate mt-1 cursor-pointer"
+                      >
+                        {selectedFinding.actor} &rarr;
+                      </Link>
+                    ) : (
+                      <div className="text-xs font-semibold text-zinc-400 truncate mt-1">None</div>
+                    )}
                   </div>
 
                   <div className="p-3 rounded-xl bg-zinc-900/60 border border-zinc-800 col-span-2 sm:col-span-1">

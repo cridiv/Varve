@@ -19,20 +19,11 @@ function ActorHistoryContent() {
         const findings = await fetchRiskRankings();
         const extracted = new Set<string>();
 
-        // Always include core DataHub owners & lineage actors
-        extracted.add("Ian Chen");
-        extracted.add("jonny1");
-        extracted.add("J. Alvarez");
-        extracted.add("K. Vance");
-
+        // Only extract actual lineage event authors
         findings.forEach((f) => {
           if (f.actor) {
             const clean = f.actor.replace(/\s*\(Departed.*?\)/i, "").trim();
             if (clean) extracted.add(clean);
-          }
-          if (f.routed_to_team) {
-            const cleanTeam = f.routed_to_team.split("(")[0].trim();
-            if (cleanTeam) extracted.add(cleanTeam);
           }
         });
 
@@ -63,11 +54,11 @@ function ActorHistoryContent() {
 
   return (
     <div className="space-y-6">
-      {/* Dynamic Actor Selector Bar — Extracted Directly from Lineage & DataHub Ownership */}
+      {/* Lineage Event Actor Selector Bar — Extracted ONLY from Lineage Event Authors */}
       {actors.length > 0 && (
         <div className="flex items-center gap-2 pb-2 border-b border-zinc-800/80 flex-wrap">
           <span className="text-xs font-mono text-zinc-500 uppercase mr-2">
-            Select Actor / Owner Profile:
+            Select Lineage Actor:
           </span>
           {actors.map((actor) => (
             <button
