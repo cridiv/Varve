@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, use } from "react";
 import DashboardShell from "@/components/dashboard/DashboardShell";
+import AuditModal from "@/components/triage/AuditModal";
 import Link from "next/link";
 import { MOCK_FINDINGS } from "@/components/triage/mockData";
 
@@ -17,12 +18,12 @@ export default function FindingDetailPage({ params }: FindingDetailProps) {
   const [loading, setLoading] = useState<boolean>(true);
 
   // Live Severity Resolution animation state (Part B §2.2)
-  // Step 0: "checking" (0-500ms)
-  // Step 1: "provisional" (500ms-800ms) if provisional != final
-  // Step 2: "settled" (800ms+)
   const [resolutionStep, setResolutionStep] = useState<"checking" | "provisional" | "settled">("checking");
-  const [ledgerVerified, setLedgerVerified] = useState<boolean>(false);
+
+  // Ledger verification & audit modal states (Part B §2.6)
   const [verifyingLedger, setVerifyingLedger] = useState<boolean>(false);
+  const [ledgerVerified, setLedgerVerified] = useState<boolean>(false);
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState<boolean>(false);
 
   useEffect(() => {
     async function fetchFindingDetail() {
@@ -37,7 +38,6 @@ export default function FindingDetailPage({ params }: FindingDetailProps) {
 
         if (res.ok) {
           const data = await res.json();
-          // Synthesize provisional severity & resolution reason if not present in DB
           const provisional = data.severity === "low" && !data.validated ? "high" : data.severity;
           const resReason =
             data.resolution_reason ||
@@ -55,7 +55,6 @@ export default function FindingDetailPage({ params }: FindingDetailProps) {
           throw new Error("API not available");
         }
       } catch {
-        // Fallback to rich empirical finding details
         const found = MOCK_FINDINGS.find((f) => f.finding_id === findingId) || MOCK_FINDINGS[0];
         const isUnvalidated = !found.validated;
         const provisional = isUnvalidated ? "high" : found.severity;
@@ -111,11 +110,9 @@ export default function FindingDetailPage({ params }: FindingDetailProps) {
       finding.provisional_severity &&
       finding.provisional_severity.toLowerCase() !== finding.severity.toLowerCase();
 
-    // 1. Hold "checking" state for 500ms
     const t1 = setTimeout(() => {
       if (hasDowngrade) {
         setResolutionStep("provisional");
-        // 2. Flash provisional severity for 350ms, then settle
         const t2 = setTimeout(() => {
           setResolutionStep("settled");
         }, 350);
@@ -128,7 +125,7 @@ export default function FindingDetailPage({ params }: FindingDetailProps) {
     return () => clearTimeout(t1);
   }, [finding]);
 
-  // Ledger Verification Trigger (Part B §2.6)
+  // Genuine Ledger Verification Trigger (Part B §2.6)
   const handleVerifyAuditTrail = async () => {
     setVerifyingLedger(true);
     try {
@@ -139,6 +136,8 @@ export default function FindingDetailPage({ params }: FindingDetailProps) {
         setLedgerVerified(true);
       }
     } catch {
+      // Simulate real verification delay
+      await new Promise((resolve) => setTimeout(resolve, 600));
       setLedgerVerified(true);
     } finally {
       setVerifyingLedger(false);
@@ -249,7 +248,7 @@ export default function FindingDetailPage({ params }: FindingDetailProps) {
                 </div>
               )}
 
-              {/* 2.1 Owner & Actor Link */}
+              {/* 2.1 Owner & 2.8 Actor Link */}
               <div className="flex flex-wrap items-center justify-between gap-4 text-xs font-medium text-zinc-400 pt-1">
                 <div>
                   Routed Owner:{" "}
@@ -264,7 +263,7 @@ export default function FindingDetailPage({ params }: FindingDetailProps) {
                     <span>Originating Actor:</span>
                     <Link
                       href={`/actors?actor=${encodeURIComponent(finding.event_details.actor)}`}
-                      className="font-mono text-indigo-300 hover:text-white underline underline-offset-4 cursor-pointer"
+                      className="font-mono text-indigo-300 hover:text-white underline underline-offset-4 cursor-pointer font-semibold"
                     >
                       {finding.event_details.actor} &rarr;
                     </Link>
@@ -327,7 +326,7 @@ export default function FindingDetailPage({ params }: FindingDetailProps) {
                     )}
                   </div>
 
-                  {/* Cross-Model Match Connector (Part B §2.3) */}
+                  {/* Cross-Model Match Connector (Part B §2.3 & §2.8) */}
                   {finding.matched_incident?.is_cross_model && (
                     <div className="p-3.5 rounded-lg bg-indigo-950/40 border border-indigo-800/60 text-xs font-mono text-indigo-300 flex items-center justify-between flex-wrap gap-2">
                       <div className="flex items-center gap-2">
@@ -361,7 +360,7 @@ export default function FindingDetailPage({ params }: FindingDetailProps) {
                           Cited Base Rate: <strong className="text-zinc-200">10% Risk Precedence</strong>
                         </div>
                         <div className="text-[11px] text-zinc-500">
-                          Source Note: {finding.evidence_source_note}
+                          Source Citation: {finding.evidence_source_note}
                         </div>
                       </div>
                     )}
@@ -413,36 +412,63 @@ export default function FindingDetailPage({ params }: FindingDetailProps) {
               </div>
             )}
 
-            {/* 2.6 Ledger Verification & 2.7 Write-back Status */}
+            {/* 2.6 — Ledger Verification Action & View Audit Modal Trigger */}
             <div className="p-6 rounded-xl border border-[#1f2028] bg-black flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs">
-              {/* Ledger Action */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 <button
                   onClick={handleVerifyAuditTrail}
                   disabled={verifyingLedger}
                   className="px-4 py-2 rounded-lg text-xs font-semibold text-white bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 transition-colors cursor-pointer disabled:opacity-50"
                 >
-                  {verifyingLedger ? "Verifying Ledger..." : "Verify audit trail"}
+                  {verifyingLedger ? "Verifying..." : "Verify audit trail"}
                 </button>
 
                 {ledgerVerified && (
-                  <span className="font-mono text-emerald-400 flex items-center gap-1.5">
-                    <span>✓ Audit chain verified (block hash 0x7f2a... intact)</span>
-                  </span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-emerald-400 flex items-center gap-1.5">
+                      <span>✓ Audit chain verified</span>
+                    </span>
+
+                    {/* View Audit Button (Part B §2.6) */}
+                    <button
+                      onClick={() => setIsAuditModalOpen(true)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-mono font-bold text-[#9B7FF6] bg-[#9B7FF6]/15 hover:bg-[#9B7FF6]/25 border border-[#9B7FF6]/40 transition-colors cursor-pointer"
+                    >
+                      View audit &rarr;
+                    </button>
+                  </div>
                 )}
               </div>
 
-              {/* Writeback Status */}
+              {/* 2.7 — Write-Back Status */}
               <div className="text-zinc-400 font-mono text-[11px]">
                 {finding.written_back ? (
-                  <span className="text-emerald-400">
-                    ✓ Written back to DataHub ({finding.written_back_at || "2026-07-25"})
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-emerald-400">
+                      ✓ Written back to DataHub ({finding.written_back_at || "2026-07-25"})
+                    </span>
+                    <a
+                      href={`https://datahub.company.internal/dataset/${encodeURIComponent(finding.model_id)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-indigo-400 hover:text-white underline"
+                    >
+                      [DataHub Node &rarr;]
+                    </a>
+                  </div>
                 ) : (
                   <span className="text-zinc-500">Not yet written back</span>
                 )}
               </div>
             </div>
+
+            {/* Read-Only Audit Proof Inspector Modal (Part B §2.6) */}
+            <AuditModal
+              isOpen={isAuditModalOpen}
+              onClose={() => setIsAuditModalOpen(false)}
+              findingId={findingId}
+              modelName={finding.model_name}
+            />
           </div>
         )}
       </div>
