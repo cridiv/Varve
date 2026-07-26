@@ -23,7 +23,7 @@ from services.validation_service import generate_validation_report
 
 app = FastAPI(title="Varve AI API", version="0.2.0")
 
-# Enable CORS for React frontend (Vite default port 5173)
+# Enable CORS for Next.js frontend (default port 3000)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

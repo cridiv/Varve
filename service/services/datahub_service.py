@@ -15,7 +15,7 @@ service_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if service_dir not in sys.path:
     sys.path.append(service_dir)
 
-from config.config import DATAHUB_GMS_URL, DATAHUB_GMS_TOKEN
+from config.config import DATAHUB_GMS_URL, DATAHUB_GMS_TOKEN, FRONTEND_BASE_URL
 from db.connection import get_db_connection
 from services.ledger_service import append_to_ledger
 
@@ -215,7 +215,7 @@ def writeback_finding_to_datahub(finding_id: str) -> Dict[str, Any]:
     finding = dict(finding)
     dataset_urn = finding["node_urn"]
 
-    finding_link_url = f"http://localhost:5173/findings/{finding_id}"
+    finding_link_url = f"{FRONTEND_BASE_URL.rstrip('/')}/findings/{finding_id}"
     annotation_text = (
         f"⚠️ Varve Risk Finding [{finding['severity'].upper()}]: {finding['narrative']} "
         f"Recommended Action: {finding['recommended_action']}"

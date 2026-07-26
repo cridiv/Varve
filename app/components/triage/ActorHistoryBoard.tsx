@@ -131,16 +131,25 @@ export default function ActorHistoryBoard({ actorName }: ActorHistoryBoardProps)
           <h1 className="text-2xl sm:text-3xl font-bold font-mono text-white tracking-tight">
             {data.actor}
           </h1>
-          {data.identity_mapping && (
-            <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-zinc-900/90 border border-white/10 text-xs font-mono text-zinc-300 flex-wrap">
-              <span className="text-[#9B7FF6] font-bold">Resolved DataHub Identity:</span>
-              <span className="text-white font-semibold">{data.identity_mapping.datahub_display_name}</span>
-              <span className="text-zinc-500 font-mono text-[11px]">({data.identity_mapping.datahub_owner_urn})</span>
-              <span className="px-1.5 py-0.5 rounded text-[9px] font-mono bg-zinc-800 text-zinc-400 border border-zinc-700">
-                {data.identity_mapping.match_type}
-              </span>
-            </div>
-          )}
+          {data.identity_mapping && (() => {
+            const isVerified = data.identity_mapping.match_type.includes("verified");
+            return (
+              <div className="mt-2 inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-900/90 border border-white/10 text-xs font-mono text-zinc-300 flex-wrap">
+                <span className="text-indigo-400 font-bold">Resolved DataHub Identity:</span>
+                <span className="text-white font-semibold">{data.identity_mapping.datahub_display_name}</span>
+                <span className="text-zinc-500 font-mono text-[11px]">({data.identity_mapping.datahub_owner_urn})</span>
+                {isVerified ? (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-950 text-emerald-300 border border-emerald-800">
+                    ✔ Verified DataHub Corpuser
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-950 text-amber-300 border border-amber-800">
+                    ⚠️ Constructed Fallback — Unverified in DataHub GMS
+                  </span>
+                )}
+              </div>
+            );
+          })()}
           <p className="text-xs text-zinc-400 mt-2 max-w-2xl">
             Correlates lineage events authored by {data.actor} across all models against downstream incident outcomes.
           </p>

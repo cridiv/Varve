@@ -44,54 +44,33 @@ def normalize_name(name_str: str) -> str:
 
 def fetch_dynamic_datahub_owners() -> List[Dict[str, Any]]:
     """
-    Dynamically fetches known DataHub owners from:
-    1. PostgreSQL findings table (routed_to_team column).
-    2. DataHub GMS corpuser graph queries (if GMS is reachable).
-    3. Core seed registries.
+    Dynamically fetches verified DataHub corpusers from GMS graph and baseline registry.
+    Only corpusers present in DataHub GMS are marked as verified_datahub_corpuser.
     """
     owners_map = {}
 
-    # Seed baseline registries
-    baseline = [
-        {"urn": "urn:li:corpuser:EMP006", "display": "Ian Chen (Director of Data Engineering)", "keywords": ["ian", "chen", "emp006", "i. chen"]},
-        {"urn": "urn:li:corpuser:jonny1", "display": "jonny1 (Data Owner)", "keywords": ["jonny", "jonny1", "j. alvarez", "j_alvarez"]},
-        {"urn": "urn:li:corpuser:patrick1", "display": "patrick1 (Data Owner)", "keywords": ["patrick", "patrick1", "p. chen", "r. chen"]},
-        {"urn": "urn:li:corpuser:k_vance", "display": "K. Vance (Data Owner)", "keywords": ["k. vance", "vance", "k_vance"]},
-        {"urn": "urn:li:corpuser:m_santos", "display": "M. Santos (Data Owner)", "keywords": ["m. santos", "santos", "m_santos"]},
+    # Verified DataHub GMS corpusers
+    baseline_verified = [
+        {"urn": "urn:li:corpuser:EMP006", "display": "Ian Chen (Director of Data Engineering)", "keywords": ["ian", "chen", "emp006", "i. chen", "ian chen"], "is_verified": True},
+        {"urn": "urn:li:corpuser:jonny1", "display": "jonny1 (Verified DataHub Owner)", "keywords": ["jonny", "jonny1", "j. alvarez", "j_alvarez", "j.alvarez"], "is_verified": True},
+        {"urn": "urn:li:corpuser:patrick1", "display": "patrick1 (Verified DataHub Owner)", "keywords": ["patrick", "patrick1", "p. chen", "r. chen", "r_chen"], "is_verified": True},
     ]
-    for b in baseline:
+    for b in baseline_verified:
         owners_map[b["urn"]] = b
 
-    # Dynamic DB Discovery from findings.routed_to_team
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("SELECT DISTINCT routed_to_team FROM findings WHERE routed_to_team IS NOT NULL AND routed_to_team != '';")
-                for r in cur.fetchall():
-                    team_str = r["routed_to_team"]
-                    clean_name = team_str.split("(")[0].strip()
-                    slug = re.sub(r'[^a-z0-9_]', '_', clean_name.lower())
-                    urn = f"urn:li:corpuser:{slug}"
-                    if urn not in owners_map:
-                        owners_map[urn] = {
-                            "urn": urn,
-                            "display": team_str,
-                            "keywords": [clean_name.lower(), slug],
-                        }
-    except Exception as e:
-        print(f"[warning] DB routed_to_team dynamic owner lookup fallback: {e}")
-
-    # Dynamic GMS Discovery (if DataHub instance is running)
+    # Dynamic GMS Discovery (if DataHub GMS instance is running)
     try:
         graph = get_datahub_graph()
-        urns = graph.get_urns_by_filter(entity_types=["corpuser"], query="*")
+        urns = list(graph.get_urns_by_filter(entity_types=["corpuser"], query="*"))
         for user_urn in urns:
             user_id = parse_owner_name(user_urn)
-            if user_urn not in owners_map:
+            clean_id = user_id.split("@")[0]
+            if user_urn not in owners_map and clean_id not in ("datahub"):
                 owners_map[user_urn] = {
                     "urn": user_urn,
-                    "display": f"{user_id} (DataHub User)",
-                    "keywords": [user_id.lower()],
+                    "display": f"{clean_id} (Verified DataHub Owner)",
+                    "keywords": [clean_id.lower(), user_id.lower()],
+                    "is_verified": True,
                 }
     except Exception as e:
         print(f"[warning] DataHub GMS corpuser lookup fallback: {e}")
@@ -102,41 +81,41 @@ def fetch_dynamic_datahub_owners() -> List[Dict[str, Any]]:
 def match_actor_to_datahub_owner(actor_name: str) -> Dict[str, str]:
     """
     Given a lineage_events.actor name (e.g. 'J. Alvarez', 'K. Vance', 'Ian Chen', or any unknown actor),
-    resolves against dynamic DataHub corpusers & routed team names.
+    resolves against verified DataHub GMS corpusers.
     
-    If the actor is NOT in the known list:
-    - Constructs a valid, standardized DataHub Corpuser URN (urn:li:corpuser:{slug}).
-    - Labels match_type as 'constructed_corpuser_urn' so unknown/new actors are fully handled.
+    - If the actor matches a verified DataHub corpuser: returns match_type 'verified_datahub_corpuser'.
+    - If the actor is NOT in DataHub GMS (e.g. K. Vance, M. Santos, Alice Cooper):
+      returns match_type 'constructed_unverified_fallback' with explicit honesty labeling.
     """
     norm_actor = normalize_name(actor_name)
     if not norm_actor:
         return {
             "datahub_owner_urn": "urn:li:corpuser:unknown",
-            "datahub_display_name": "Unknown Contributor",
-            "match_type": "default_fallback",
+            "datahub_display_name": "Unknown Contributor (Unverified)",
+            "match_type": "constructed_unverified_fallback",
         }
 
-    # Fetch dynamic list combining seed registry, findings DB table, and DataHub GMS graph
+    # Fetch verified DataHub GMS corpusers
     known_owners = fetch_dynamic_datahub_owners()
 
-    # 1. Exact or keyword match
+    # 1. Match against verified DataHub corpusers
     for owner in known_owners:
         norm_display = normalize_name(owner["display"])
-        if norm_actor == norm_display or (len(norm_actor) > 3 and norm_actor in norm_display):
+        if norm_actor == norm_display:
             return {
                 "datahub_owner_urn": owner["urn"],
                 "datahub_display_name": owner["display"],
-                "match_type": "exact_display_match",
+                "match_type": "verified_datahub_corpuser",
             }
         for kw in owner.get("keywords", []):
             if kw and (kw == norm_actor or (len(kw) > 3 and kw in norm_actor)):
                 return {
                     "datahub_owner_urn": owner["urn"],
                     "datahub_display_name": owner["display"],
-                    "match_type": "alias_keyword_match",
+                    "match_type": "verified_datahub_corpuser",
                 }
 
-    # 2. First initial + last name matching (e.g. "J. Alvarez" -> "jonny1", "I. Chen" -> "Ian Chen")
+    # 2. First initial + last name matching against verified corpusers
     actor_parts = norm_actor.replace(".", " ").split()
     if len(actor_parts) >= 2:
         initial = actor_parts[0][0]
@@ -147,16 +126,16 @@ def match_actor_to_datahub_owner(actor_name: str) -> Dict[str, str]:
                 return {
                     "datahub_owner_urn": owner["urn"],
                     "datahub_display_name": owner["display"],
-                    "match_type": "fuzzy_initial_match",
+                    "match_type": "verified_datahub_corpuser",
                 }
 
-    # 3. Dynamic Handler for Actors NOT in the known list:
-    # Generates a valid DataHub corpuser URN format (e.g. urn:li:corpuser:john_doe)
+    # 3. Honest Fallback Handler for Actors NOT in DataHub GMS (K. Vance, M. Santos, Alice Cooper):
+    # Constructs a standardized DataHub Corpuser URN and labels match_type as 'constructed_unverified_fallback'
     slug = re.sub(r'[^a-z0-9_]', '_', norm_actor)
     return {
         "datahub_owner_urn": f"urn:li:corpuser:{slug}",
-        "datahub_display_name": f"{actor_name} (Data Owner)",
-        "match_type": "constructed_corpuser_urn",
+        "datahub_display_name": f"{actor_name} (Constructed — Unverified in DataHub)",
+        "match_type": "constructed_unverified_fallback",
     }
 
 

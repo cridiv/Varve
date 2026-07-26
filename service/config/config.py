@@ -38,6 +38,9 @@ MODEL_API_KEY = os.environ.get("MODEL_API_KEY")
 DATAHUB_GMS_URL = os.environ.get("DATAHUB_GMS_URL") or "http://localhost:8080"
 DATAHUB_GMS_TOKEN = os.environ.get("DATAHUB_GMS_TOKEN") or None  # optional for local quickstart
 
+# --- Frontend Base URL ---
+FRONTEND_BASE_URL = os.environ.get("FRONTEND_BASE_URL") or "http://localhost:3000"
+
 
 # --- Postgres connection ---
 POSTGRES_DSN = os.environ.get(
@@ -67,4 +70,5 @@ def validate_config() -> None:
     print(f"[config] LLM model:   {MODEL_NAME}")
     print(f"[config] Invoke URL:  {MODEL_INVOKE_URL}")
     print(f"[config] DataHub GMS: {DATAHUB_GMS_URL}")
+    print(f"[config] Frontend:    {FRONTEND_BASE_URL}")
     print(f"[config] Postgres:    {POSTGRES_DSN}")
