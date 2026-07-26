@@ -194,6 +194,11 @@ export default function AuditModal({
 }: AuditModalProps) {
   const [entries, setEntries] = useState<LedgerEntryRow[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(0);
+
+  const handleToggleRow = (idx: number) => {
+    setExpandedIndex((prev) => (prev === idx ? null : idx));
+  };
 
   // Esc key listener to close modal
   const handleKeyDown = useCallback(
@@ -287,49 +292,91 @@ export default function AuditModal({
               <span className="text-[11px] font-mono text-emerald-400 font-semibold">21/21 Chain Intact</span>
             </div>
 
-            {/* Ledger Entry Rows with Side-by-Side Hashes & Rich Payload Box */}
-            <div className="space-y-3 max-h-[320px] sm:max-h-[330px] overflow-y-auto pr-1.5 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900">
-              {entries.map((entry, idx) => (
-                <div
-                  key={idx}
-                  className="p-3.5 rounded-xl border border-white/5 bg-black hover:border-white/10 transition-colors space-y-2 text-xs"
-                >
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-zinc-900 text-zinc-200 border border-zinc-800">
-                        {entry.event_type}
-                      </span>
-                      <span className="text-[11px] font-mono text-zinc-500">
-                        Block #{entry.ledger_id}
-                      </span>
+            {/* Ledger Entry Rows with Clickable Expandable Full Metadata (Accordion) */}
+            <div className="space-y-2.5 max-h-[380px] sm:max-h-[420px] overflow-y-auto pr-1.5 scrollbar-thin scrollbar-thumb-zinc-700 scrollbar-track-zinc-900">
+              {entries.map((entry, idx) => {
+                const isExpanded = expandedIndex === idx;
+
+                return (
+                  <div
+                    key={idx}
+                    onClick={() => handleToggleRow(idx)}
+                    className={`p-3.5 rounded-xl border transition-all cursor-pointer select-none space-y-2 text-xs ${
+                      isExpanded
+                        ? "bg-zinc-950 border-[#9B7FF6]/50 shadow-[0_0_15px_rgba(155,127,246,0.15)]"
+                        : "bg-black/90 border-white/10 hover:border-white/20 hover:bg-zinc-900/60"
+                    }`}
+                  >
+                    {/* Compact Header Row */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-zinc-900 text-zinc-200 border border-zinc-800">
+                          {entry.event_type}
+                        </span>
+                        <span className="text-[11px] font-mono text-zinc-400">
+                          Block #{entry.ledger_id}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-start sm:self-auto">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 flex items-center gap-1">
+                          <span>✓</span>
+                          <span>PASS</span>
+                        </span>
+
+                        {/* Expand / Collapse Indicator Arrow */}
+                        <span className="text-[#9B7FF6] font-mono text-xs font-bold transition-transform">
+                          {isExpanded ? "▲" : "▼"}
+                        </span>
+                      </div>
                     </div>
 
-                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 flex items-center gap-1 self-start sm:self-auto">
-                      <span>✓</span>
-                      <span>PASS</span>
-                    </span>
-                  </div>
+                    {/* Collapsed One-line Summary Preview */}
+                    {!isExpanded && (
+                      <div className="font-mono text-[11px] text-zinc-400 flex items-center justify-between gap-3 truncate">
+                        <span className="truncate">
+                          this_hash: <code className="text-emerald-300 font-bold">{truncateHash(entry.this_hash)}</code>
+                        </span>
+                        <span className="text-[10px] text-[#9B7FF6] shrink-0">Click to view full metadata &rarr;</span>
+                      </div>
+                    )}
 
-                  {/* Side-by-Side Visible Hashes */}
-                  <div className="font-mono text-[11px] text-zinc-400 flex items-center gap-3 flex-wrap">
-                    <span>
-                      this_hash: <code className="text-emerald-300 font-bold">{truncateHash(entry.this_hash)}</code>
-                    </span>
-                    <span className="text-zinc-600">|</span>
-                    <span>
-                      prev_hash: <code className="text-zinc-500 font-semibold">{truncateHash(entry.prev_hash)}</code>
-                    </span>
-                  </div>
+                    {/* Expanded Full Metadata Drawer */}
+                    {isExpanded && (
+                      <div className="space-y-3 pt-2.5 border-t border-zinc-800/80 animate-in fade-in duration-150">
+                        {/* Complete Full Hashes */}
+                        <div className="space-y-1.5 bg-zinc-900/80 p-3 rounded-lg border border-zinc-800 font-mono text-[11px]">
+                          <div className="flex items-center justify-between flex-wrap gap-1">
+                            <span className="text-zinc-400 font-semibold">this_hash:</span>
+                            <span className="text-emerald-300 font-bold break-all">{entry.this_hash}</span>
+                          </div>
+                          <div className="flex items-center justify-between flex-wrap gap-1">
+                            <span className="text-zinc-400 font-semibold">prev_hash:</span>
+                            <span className="text-zinc-400 font-medium break-all">{entry.prev_hash}</span>
+                          </div>
+                          <div className="flex items-center justify-between text-[10px] text-zinc-500 pt-1">
+                            <span>Timestamp: {new Date(entry.created_at).toUTCString()}</span>
+                            <span>Proof Status: SHA-256 Validated</span>
+                          </div>
+                        </div>
 
-                  {/* Payload Code Box */}
-                  {entry.payload && (
-                    <div className="text-[10px] font-mono text-zinc-400 truncate bg-zinc-950 px-2.5 py-1.5 rounded border border-zinc-800/80">
-                      <span className="text-indigo-400 font-semibold mr-1.5">Payload:</span>
-                      <span className="text-zinc-300">{JSON.stringify(entry.payload)}</span>
-                    </div>
-                  )}
-                </div>
-              ))}
+                        {/* Complete Formatted JSON Payload Object */}
+                        {entry.payload && (
+                          <div className="space-y-1">
+                            <div className="text-[11px] font-mono font-semibold text-indigo-300 flex items-center justify-between">
+                              <span>Full Metadata Payload</span>
+                              <span className="text-[10px] text-zinc-500 font-normal">JSON Schema v1.0</span>
+                            </div>
+                            <pre className="text-[11px] font-mono text-zinc-200 bg-black/90 p-3 rounded-lg border border-indigo-900/40 overflow-x-auto leading-relaxed whitespace-pre-wrap">
+                              {JSON.stringify(entry.payload, null, 2)}
+                            </pre>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

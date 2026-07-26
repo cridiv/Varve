@@ -46,6 +46,7 @@ export default function LedgerVerification() {
   const [isVerifying, setIsVerifying] = useState(false);
   const [verificationPassed, setVerificationPassed] = useState(false);
   const [verifiedCount, setVerifiedCount] = useState(1045);
+  const [selectedBlockIndex, setSelectedBlockIndex] = useState<number | null>(0);
 
   const handleRunVerification = () => {
     setIsVerifying(true);
@@ -127,36 +128,79 @@ export default function LedgerVerification() {
         {/* Right Column: Animated Block Stream & Trigger */}
         <div className="space-y-6">
           <div className="space-y-4">
-            {INITIAL_BLOCKS.map((block, idx) => (
-              <div
-                key={block.blockNumber}
-                className={`relative p-5 rounded-xl border transition-all duration-300 ${
-                  isVerifying
-                    ? "border-[#9B7FF6]/50 bg-[#9B7FF6]/10"
-                    : "border-white/10 bg-gradient-to-b from-zinc-900/60 to-zinc-950/80 backdrop-blur-md"
-                }`}
-              >
-                {/* Connecting Laser Line */}
-                {idx < INITIAL_BLOCKS.length - 1 && (
-                  <div className="absolute left-7 -bottom-6 w-0.5 h-6 bg-gradient-to-b from-[#9B7FF6]/60 to-transparent z-10" />
-                )}
+            {INITIAL_BLOCKS.map((block, idx) => {
+              const isExpanded = selectedBlockIndex === idx;
 
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="font-mono text-xs font-bold text-[#9B7FF6] bg-[#9B7FF6]/15 px-2 py-1 rounded">
-                      #{block.blockNumber}
-                    </span>
-                    <span className="text-sm font-semibold text-white">{block.action}</span>
+              return (
+                <div
+                  key={block.blockNumber}
+                  onClick={() => setSelectedBlockIndex(isExpanded ? null : idx)}
+                  className={`relative p-5 rounded-xl border transition-all duration-300 cursor-pointer select-none ${
+                    isExpanded
+                      ? "border-[#9B7FF6] bg-[#9B7FF6]/15 shadow-[0_0_20px_rgba(155,127,246,0.25)]"
+                      : isVerifying
+                      ? "border-[#9B7FF6]/50 bg-[#9B7FF6]/10"
+                      : "border-white/10 bg-gradient-to-b from-zinc-900/60 to-zinc-950/80 backdrop-blur-md hover:border-white/25"
+                  }`}
+                >
+                  {/* Connecting Laser Line */}
+                  {idx < INITIAL_BLOCKS.length - 1 && (
+                    <div className="absolute left-7 -bottom-6 w-0.5 h-6 bg-gradient-to-b from-[#9B7FF6]/60 to-transparent z-10" />
+                  )}
+
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono text-xs font-bold text-[#9B7FF6] bg-[#9B7FF6]/15 px-2 py-1 rounded">
+                        #{block.blockNumber}
+                      </span>
+                      <span className="text-sm font-semibold text-white">{block.action}</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-zinc-500 font-mono">{block.timestamp}</span>
+                      <span className="text-[#9B7FF6] text-xs font-bold font-mono">
+                        {isExpanded ? "▲" : "▼"}
+                      </span>
+                    </div>
                   </div>
-                  <span className="text-[10px] text-zinc-500">{block.timestamp}</span>
-                </div>
 
-                <div className="mt-3 flex items-center justify-between text-xs text-zinc-400 font-mono">
-                  <span>Target: <strong className="text-zinc-200">{block.targetModel}</strong></span>
-                  <span className="text-[10px] text-zinc-500">Hash: {block.hash}</span>
+                  <div className="mt-3 flex items-center justify-between text-xs text-zinc-400 font-mono">
+                    <span>Target: <strong className="text-zinc-200">{block.targetModel}</strong></span>
+                    <span className="text-[10px] text-zinc-500">Hash: {block.hash}</span>
+                  </div>
+
+                  {/* Expanded Full Block Metadata Drawer */}
+                  {isExpanded && (
+                    <div className="mt-4 pt-3 border-t border-zinc-800 space-y-2 font-mono text-xs text-zinc-300 animate-in fade-in duration-150">
+                      <div className="flex justify-between items-center text-[11px]">
+                        <span className="text-zinc-400">Previous Block Hash:</span>
+                        <span className="text-zinc-400">{block.prevHash}</span>
+                      </div>
+                      <div className="flex justify-between items-center text-[11px]">
+                        <span className="text-zinc-400">Full Block Hash:</span>
+                        <span className="text-emerald-400 font-bold">{block.hash}</span>
+                      </div>
+                      <div className="p-2.5 rounded bg-black border border-zinc-800 text-[10px] text-zinc-300">
+                        <span className="text-indigo-400 font-semibold block mb-1">Payload Metadata:</span>
+                        <code>
+                          {JSON.stringify(
+                            {
+                              block_id: block.blockNumber,
+                              action: block.action,
+                              target_model: block.targetModel,
+                              proof: "SHA-256 Validated",
+                              status: block.status,
+                            },
+                            null,
+                            2
+                          )}
+                        </code>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Verification Trigger Button */}
