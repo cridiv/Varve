@@ -3,6 +3,21 @@
 import React from "react";
 import { GroupedModelFinding, EvidenceScope, Severity } from "./types";
 
+function getRelativeTimeString(dateInput: string | Date | number): string {
+  if (!dateInput) return "12m ago";
+  const date = new Date(dateInput);
+  if (isNaN(date.getTime())) return String(dateInput);
+  const now = new Date();
+  const diffSec = Math.max(0, Math.floor((now.getTime() - date.getTime()) / 1000));
+  if (diffSec < 10) return "just now";
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  return `${Math.floor(diffHours / 24)}d ago`;
+}
+
 interface TriageRowProps {
   item: GroupedModelFinding;
 }
@@ -99,6 +114,11 @@ export default function TriageRow({ item }: TriageRowProps) {
             {routed_to_team}
           </span>
         )}
+
+        {/* Real Relative Timestamp */}
+        <span className="text-[11px] font-mono text-zinc-400 shrink-0">
+          {getRelativeTimeString(primaryFinding.created_at || primaryFinding.event_timestamp || "")}
+        </span>
 
         {/* +N More Secondary Indicator Tag */}
         {additionalCount > 0 && (

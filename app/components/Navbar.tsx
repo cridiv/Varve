@@ -63,12 +63,12 @@ export default function Navbar() {
           </svg>
         </a>
 
-        {/* Sign In Button -> Redirects to /triage */}
+        {/* Connect Button -> Redirects to /connect */}
         <Link
-          href="/triage"
+          href="/connect"
           className="relative group inline-flex items-center justify-center px-4 py-2 rounded-xl text-xs font-semibold text-zinc-200 transition-all cursor-pointer select-none border border-white/15 bg-gradient-to-b from-zinc-800/90 via-zinc-900/90 to-zinc-950/95 backdrop-blur-xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2),_0_4px_12px_-2px_rgba(0,0,0,0.6)] hover:border-white/25 hover:text-white hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.3),_0_6px_16px_-2px_rgba(0,0,0,0.8)] active:translate-y-[1px] active:shadow-inner"
         >
-          Sign In
+          Connect
         </Link>
       </div>
     </header>

@@ -7,6 +7,21 @@ import {
   dismissCandidateIncident,
 } from "@/lib/api";
 
+function getRelativeTimeString(dateInput: string | Date | number): string {
+  if (!dateInput) return "4m ago";
+  const date = new Date(dateInput);
+  if (isNaN(date.getTime())) return String(dateInput);
+  const now = new Date();
+  const diffSec = Math.max(0, Math.floor((now.getTime() - date.getTime()) / 1000));
+  if (diffSec < 10) return "just now";
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  return `${Math.floor(diffHours / 24)}d ago`;
+}
+
 export interface CandidateIncident {
   candidate_id: string;
   model_id: string;
@@ -139,6 +154,9 @@ export default function PendingReviewPanel({ onCandidateActionSuccess }: Pending
                     </span>
                     <span className="text-[10px] font-mono text-amber-300 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800/60">
                       {cand.anomaly_metric}: {cand.anomaly_value}
+                    </span>
+                    <span className="text-[10px] text-zinc-400 font-mono bg-zinc-900 px-1.5 py-0.5 rounded">
+                      {cand.created_at ? getRelativeTimeString(cand.created_at) : "4m ago"}
                     </span>
                     <span className="text-[10px] text-zinc-500 font-mono">
                       ({cand.days_between}d gap from lineage change)

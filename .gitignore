@@ -1,0 +1,17 @@
+# Varve Master Documentation
+VARVE_MASTER_DOCUMENTATION*
+VARVE_MASTER_DOCUMENTATION.html
+VARVE_MASTER_DOCUMENTATION.md
+VARVE_MASTER_DOCUMENTATION.pdf
+
+# OS & Environment
+.DS_Store
+.env
+.env.local
+*.log
+
+# Dependencies & Build artifacts
+node_modules/
+.next/
+__pycache__/
+.venv/

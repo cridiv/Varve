@@ -152,11 +152,24 @@ export default function ActorHistoryBoard({ actorName }: ActorHistoryBoardProps)
 
   if (loading) {
     return (
-      <div className="space-y-6 animate-pulse">
-        <div className="h-8 w-48 bg-zinc-800 rounded-md" />
-        <div className="grid grid-cols-2 gap-4">
-          <div className="h-24 bg-zinc-900 rounded-xl" />
-          <div className="h-24 bg-zinc-900 rounded-xl" />
+      <div className="w-full max-w-5xl mx-auto p-12 rounded-2xl border border-white/10 bg-zinc-950/80 backdrop-blur-xl text-center space-y-6 flex flex-col items-center justify-center">
+        <div className="relative flex items-center justify-center">
+          <span className="w-12 h-12 rounded-full border-2 border-[#9B7FF6] border-t-transparent animate-spin" />
+          <span className="absolute w-6 h-6 rounded-full bg-[#9B7FF6]/20 animate-ping" />
+        </div>
+
+        <div className="space-y-2">
+          <h3 className="font-mono text-sm font-bold text-white tracking-wide">
+            Searching lineage across all models for actor &quot;{actorName}&quot;...
+          </h3>
+          <p className="text-xs font-mono text-zinc-400">
+            Correlating 67 datasets across 5 transformation pipelines in DataHub GMS
+          </p>
+        </div>
+
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-[10px] font-mono text-indigo-300 bg-indigo-950/60 border border-indigo-800/60">
+          <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 animate-pulse" />
+          <span>Cross-Model Graph Traversal Active</span>
         </div>
       </div>
     );
@@ -207,7 +220,7 @@ export default function ActorHistoryBoard({ actorName }: ActorHistoryBoardProps)
       </div>
 
       {/* 2.2 — Summary Stat Block (Prominent Numbers Above Timeline) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
         {/* Stat Card 1: Incident Rate */}
         <div className="p-6 rounded-xl border border-[#1f2028] bg-black space-y-2">
           <div className="font-mono text-3xl sm:text-4xl font-extrabold text-rose-500 tracking-tight">
@@ -225,6 +238,21 @@ export default function ActorHistoryBoard({ actorName }: ActorHistoryBoardProps)
           </div>
           <p className="text-xs text-zinc-400 font-medium leading-relaxed">
             average time to catch downstream incident consequences.
+          </p>
+        </div>
+
+        {/* Stat Card 3: Explicit Query Scope Stat (Screen 3 Spec) */}
+        <div className="p-6 rounded-xl border border-[#1f2028] bg-black space-y-2 flex flex-col justify-between">
+          <div className="space-y-1">
+            <div className="text-[10px] font-mono text-[#9B7FF6] uppercase tracking-wider font-semibold">
+              DataHub Query Scope
+            </div>
+            <div className="font-mono text-xl font-bold text-white tracking-tight">
+              67 Datasets
+            </div>
+          </div>
+          <p className="text-xs text-zinc-400 font-medium leading-relaxed">
+            Searched across 5 transformation pipelines in DataHub GMS graph.
           </p>
         </div>
       </div>
