@@ -107,7 +107,15 @@ export default function ActorHistoryBoard({ actorName }: ActorHistoryBoardProps)
   }
 
   const incidentRate = data.pattern_summary?.incident_rate_pct ?? (data.events_with_incidents > 0 ? Math.round((data.events_with_incidents / data.total_events) * 100) : 0);
-  const avgLag = data.pattern_summary?.avg_detection_lag_days ?? 0;
+  
+  // Calculate exact average detection lag dynamically across all events for this actor
+  const validLags = data.events
+    .map((e) => e.linked_incident?.detection_lag_days)
+    .filter((l): l is number => l != null && !isNaN(l));
+  const avgLag = validLags.length > 0
+    ? Math.round(validLags.reduce((a, b) => a + b, 0) / validLags.length)
+    : Math.round(data.pattern_summary?.avg_detection_lag_days ?? 0);
+
   const isDeparted = data.events.some((e) => e.actor_departed_within_90d);
 
   return (
@@ -204,9 +212,19 @@ export default function ActorHistoryBoard({ actorName }: ActorHistoryBoardProps)
         <div className="relative pl-6 space-y-8 before:absolute before:left-2.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-zinc-800">
           {data.events.map((evt, idx) => {
             const hasIncident = evt.linked_incident !== null;
+            const lagValue = evt.linked_incident?.detection_lag_days != null
+              ? Math.round(evt.linked_incident.detection_lag_days)
+              : 0;
+            const formattedDate = evt.event_timestamp
+              ? new Date(evt.event_timestamp).toLocaleDateString("en-US", {
+                  month: "short",
+                  day: "numeric",
+                  year: "numeric",
+                })
+              : "2026-05-20";
 
             return (
-              <div key={evt.event_id || idx} className="relative group">
+              <div key={`${evt.event_id || "evt"}-${idx}`} className="relative group">
                 {/* Timeline Node Bullet */}
                 <div
                   className={`absolute -left-[21px] top-1.5 w-3.5 h-3.5 rounded-full border-2 transition-transform ${
@@ -228,8 +246,8 @@ export default function ActorHistoryBoard({ actorName }: ActorHistoryBoardProps)
                       </span>
                     </div>
 
-                    <span className="text-xs font-mono text-zinc-500">
-                      {evt.event_timestamp ? new Date(evt.event_timestamp).toLocaleDateString() : "2026-05-20"}
+                    <span className="text-xs font-mono text-zinc-400">
+                      {formattedDate}
                     </span>
                   </div>
 
@@ -244,7 +262,7 @@ export default function ActorHistoryBoard({ actorName }: ActorHistoryBoardProps)
                       <div className="flex items-center gap-3">
                         <div className="flex-1 h-0.5 bg-gradient-to-r from-rose-500/80 via-rose-500 to-amber-500 rounded" />
                         <span className="px-2.5 py-1 rounded bg-rose-950 text-rose-300 border border-rose-800 text-[11px] font-mono font-bold shadow-sm shrink-0">
-                          ⚡ {evt.linked_incident.detection_lag_days ?? 14.0} DAYS DETECTION LAG
+                          ⚡ {lagValue} DAYS DETECTION LAG
                         </span>
                         <div className="flex-1 h-0.5 bg-gradient-to-r from-amber-500 to-rose-500/80 rounded" />
                       </div>

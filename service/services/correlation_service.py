@@ -116,7 +116,7 @@ def get_all_actor_events(actor: str) -> List[Dict[str, Any]]:
             i.detected_at,
             i.description,
             i.fix_summary,
-            EXTRACT(EPOCH FROM (i.detected_at - e.event_timestamp)) / 86400.0 AS detection_lag_days
+            ROUND(EXTRACT(EPOCH FROM (i.detected_at - e.event_timestamp)) / 86400.0)::INT AS detection_lag_days
         FROM lineage_events e
         LEFT JOIN incidents i ON i.root_cause_event_id = e.event_id
         LEFT JOIN findings f ON f.related_event_id = e.event_id

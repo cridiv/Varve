@@ -244,7 +244,9 @@ export default function FindingDetailPage({ params }: FindingDetailProps) {
                       <div>
                         Timestamp:{" "}
                         <span className="font-mono text-zinc-300">
-                          {finding.event_details?.event_timestamp}
+                          {finding.event_details?.event_timestamp
+                            ? new Date(finding.event_details.event_timestamp).toUTCString().replace("GMT", "UTC")
+                            : "Apr 10, 2026, 09:00 UTC"}
                         </span>
                       </div>
                       <div>
@@ -273,22 +275,39 @@ export default function FindingDetailPage({ params }: FindingDetailProps) {
                     </div>
 
                     {/* Matched Incident with Prominent Detection Lag */}
-                    {finding.matched_incident && (
-                      <div className="p-4 rounded-lg bg-[#0a0a0c] border border-zinc-800 space-y-2 text-xs">
-                        <div className="text-[10px] font-mono uppercase text-zinc-500">
-                          Matched Historical Incident
+                    {finding.matched_incident && (() => {
+                      const inc = finding.matched_incident;
+                      const evt = finding.event_details;
+                      let lagDays: number | null = null;
+                      if (inc.detection_lag_days != null) {
+                        lagDays = Math.round(inc.detection_lag_days);
+                      } else if (inc.detected_at && evt?.event_timestamp) {
+                        const d1 = new Date(evt.event_timestamp).getTime();
+                        const d2 = new Date(inc.detected_at).getTime();
+                        lagDays = Math.max(0, Math.round((d2 - d1) / (1000 * 60 * 60 * 24)));
+                      }
+
+                      return (
+                        <div className="p-4 rounded-lg bg-[#0a0a0c] border border-zinc-800 space-y-2 text-xs">
+                          <div className="text-[10px] font-mono uppercase text-zinc-500">
+                            Matched Historical Incident
+                          </div>
+                          <div className="flex items-baseline gap-2">
+                            <span className="text-zinc-400">Detection Lag:</span>
+                            <span className="font-mono text-xl font-extrabold text-rose-400">
+                              {lagDays !== null
+                                ? lagDays === 0
+                                  ? "Same Day (<1 day)"
+                                  : `${lagDays} days`
+                                : "N/A"}
+                            </span>
+                          </div>
+                          <div className="text-zinc-300">
+                            {inc.description}
+                          </div>
                         </div>
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-zinc-400">Detection Lag:</span>
-                          <span className="font-mono text-xl font-extrabold text-rose-400">
-                            {finding.matched_incident.detection_lag_days ?? 14.0} days
-                          </span>
-                        </div>
-                        <div className="text-zinc-300">
-                          {finding.matched_incident.description}
-                        </div>
-                      </div>
-                    )}
+                      );
+                    })()}
                   </div>
 
                   {/* Cross-Model Match Connector */}

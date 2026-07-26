@@ -158,9 +158,11 @@ export default function PendingReviewPanel({ onCandidateActionSuccess }: Pending
                     <span className="text-[10px] text-zinc-400 font-mono bg-zinc-900 px-1.5 py-0.5 rounded">
                       {cand.created_at ? getRelativeTimeString(cand.created_at) : "4m ago"}
                     </span>
-                    <span className="text-[10px] text-zinc-500 font-mono">
-                      ({cand.days_between ?? 14.0}d gap from lineage change)
-                    </span>
+                    {cand.days_between != null && (
+                      <span className="text-[10px] text-zinc-500 font-mono">
+                        ({Math.round(cand.days_between)}d gap from lineage change)
+                      </span>
+                    )}
                   </div>
 
                   <p className="text-xs text-zinc-400 leading-snug truncate">

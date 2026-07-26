@@ -99,8 +99,14 @@ def get_patterns_by_actor(actor: str):
     if not rows:
         raise HTTPException(status_code=404, detail=f"No lineage events or owned datasets found for actor '{actor}'")
 
+    seen_event_ids = set()
     events_out = []
     for r in rows:
+        eid = str(r["event_id"])
+        if eid in seen_event_ids:
+            continue
+        seen_event_ids.add(eid)
+
         urn_parts = r["model_id"].split(".")
         model_name = urn_parts[-1].replace(",PROD)", "") if urn_parts else r["model_id"]
 
@@ -115,11 +121,11 @@ def get_patterns_by_actor(actor: str):
                 "detected_at": r["detected_at"].isoformat() if r.get("detected_at") else None,
                 "description": r.get("description"),
                 "fix_summary": r.get("fix_summary"),
-                "detection_lag_days": round(float(r["detection_lag_days"]), 1) if r.get("detection_lag_days") else None,
+                "detection_lag_days": int(round(float(r["detection_lag_days"]))) if r.get("detection_lag_days") is not None else None,
             }
 
         events_out.append({
-            "event_id": str(r["event_id"]),
+            "event_id": eid,
             "model_id": r["model_id"],
             "model_name": model_name,
             "node_type": r.get("node_type", "dataset"),
@@ -150,9 +156,9 @@ def get_patterns_by_actor(actor: str):
             "times_observed": pr["times_observed"],
             "times_preceded_incident": pr["times_preceded_incident"],
             "incident_rate_pct": round(
-                100 * pr["times_preceded_incident"] / pr["times_observed"], 1
+                100 * pr["times_preceded_incident"] / pr["times_observed"]
             ) if pr["times_observed"] else 0,
-            "avg_detection_lag_days": float(pr["avg_detection_lag_days"] or 0),
+            "avg_detection_lag_days": int(round(float(pr["avg_detection_lag_days"] or 0))),
         }
 
     return {

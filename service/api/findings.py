@@ -46,9 +46,11 @@ def get_risk_ranking():
             f.created_at,
             e.actor,
             e.node_type,
-            e.event_timestamp
+            e.event_timestamp,
+            i.detected_at AS incident_detected_at
         FROM findings f
         JOIN lineage_events e ON f.related_event_id = e.event_id
+        LEFT JOIN incidents i ON f.related_event_id = i.root_cause_event_id
         ORDER BY 
             CASE WHEN f.severity = 'high' THEN 1 ELSE 2 END,
             f.validated DESC,
@@ -66,6 +68,10 @@ def get_risk_ranking():
         ev_scope = r.get("evidence_scope", "org_wide")
         ts = r.get("tag_source", "none")
         
+        event_ts = r.get("event_timestamp")
+        inc_ts = r.get("incident_detected_at")
+        lag_days = int(round((inc_ts - event_ts).total_seconds() / 86400.0)) if (inc_ts and event_ts) else None
+        
         rankings.append({
             "finding_id": str(r["finding_id"]),
             "model_id": r["model_id"],
@@ -82,6 +88,7 @@ def get_risk_ranking():
             "actor": r["actor"],
             "node_type": r["node_type"],
             "event_timestamp": r["event_timestamp"].isoformat() if r["event_timestamp"] else None,
+            "detection_lag_days": lag_days,
             "summary": r["narrative"],
             "recommended_action": r["recommended_action"],
             "written_back": r["written_back_at"] is not None,
@@ -219,6 +226,14 @@ def get_finding_detail(finding_id: str):
     matched_incident = None
     if incidents:
         inc = incidents[0]
+        event_ts = finding["event_timestamp"]
+        detected_ts = inc["detected_at"]
+        detection_lag = None
+        if detected_ts and event_ts:
+            detection_lag = int(round((detected_ts - event_ts).total_seconds() / 86400.0))
+
+        is_cross = inc["target_model_id"] != finding["model_id"]
+
         matched_incident = {
             "incident_id": str(inc["incident_id"]),
             "target_model_id": inc["target_model_id"],
@@ -226,6 +241,8 @@ def get_finding_detail(finding_id: str):
             "resolved_at": inc["resolved_at"].isoformat() if inc["resolved_at"] else None,
             "description": inc["description"],
             "fix_summary": inc["fix_summary"],
+            "detection_lag_days": detection_lag,
+            "is_cross_model": is_cross,
         }
 
     urn_parts = finding["model_id"].split(".")
