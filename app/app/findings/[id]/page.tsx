@@ -4,7 +4,7 @@ import React, { useState, useEffect, use } from "react";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 import AuditModal from "@/components/triage/AuditModal";
 import Link from "next/link";
-import { MOCK_FINDINGS } from "@/components/triage/mockData";
+import { fetchFindingDetail, verifyLedgerChain } from "@/lib/api";
 
 interface FindingDetailProps {
   params: Promise<{ id: string }>;
@@ -26,80 +26,21 @@ export default function FindingDetailPage({ params }: FindingDetailProps) {
   const [isAuditModalOpen, setIsAuditModalOpen] = useState<boolean>(false);
 
   useEffect(() => {
-    async function fetchFindingDetail() {
+    async function loadFinding() {
       setLoading(true);
       setResolutionStep("checking");
 
       try {
-        const res = await fetch(`http://localhost:8000/findings/${findingId}`, {
-          headers: { Accept: "application/json" },
-          cache: "no-store",
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          const provisional = data.severity === "low" && !data.validated ? "high" : data.severity;
-          const resReason =
-            data.resolution_reason ||
-            (!data.validated
-              ? "No org incident history found; evaluated industry baseline rate (10% risk precedence → severity=LOW)."
-              : "Confirmed against historical organizational incident precedents.");
-
-          setFinding({
-            ...data,
-            provisional_severity: provisional,
-            resolution_reason: resReason,
-            evidence_source_note: "Datadog 2025 Data Debt Report & Published Incident Benchmarks",
-          });
-        } else {
-          throw new Error("API not available");
-        }
-      } catch {
-        const found = MOCK_FINDINGS.find((f) => f.finding_id === findingId) || MOCK_FINDINGS[0];
-        const isUnvalidated = !found.validated;
-        const provisional = isUnvalidated ? "high" : found.severity;
-
-        setFinding({
-          ...found,
-          narrative: found.summary,
-          provisional_severity: provisional,
-          resolution_reason: isUnvalidated
-            ? "No org incident history found; evaluated industry baseline rate (10% risk precedence → severity=LOW)."
-            : "Confirmed against 2 historical organizational incident precedents.",
-          evidence_source_note: "Datadog 2025 Data Debt Report & Published Incident Benchmarks",
-          written_back: found.written_back || false,
-          event_details: {
-            event_id: "evt-9042",
-            node_type: found.node_type || "threshold",
-            node_urn: found.model_id,
-            event_type: "modified",
-            event_timestamp: found.event_timestamp || "2026-05-20T10:00:00Z",
-            actor: found.actor || "J. Alvarez (Departed)",
-            documentation_present: false,
-          },
-          matched_incident:
-            found.validated
-              ? {
-                  incident_id: "inc-104",
-                  target_model_id:
-                    found.model_name === "addresses_pipeline"
-                      ? "urn:li:dataset:(urn:li:dataPlatform:dbt,b2fd91.order_entry_db.order_entry.order_items,PROD)"
-                      : found.model_id,
-                  is_cross_model: found.model_name === "addresses_pipeline",
-                  detection_lag_days: 14.0,
-                  description: "Downstream order items sync failure correlated with upstream threshold edit in addresses dataset.",
-                  detected_at: "2026-06-15T11:00:00Z",
-                  resolved_at: "2026-06-29T18:00:00Z",
-                  fix_summary: "Repaired transformation pipeline logic.",
-                }
-              : null,
-        });
+        const data = await fetchFindingDetail(findingId);
+        setFinding(data);
+      } catch (err) {
+        console.warn("Failed fetching finding detail:", err);
       } finally {
         setLoading(false);
       }
     }
 
-    fetchFindingDetail();
+    loadFinding();
   }, [findingId]);
 
   // Live Severity Beat Sequence (Part B §2.2)
@@ -129,15 +70,13 @@ export default function FindingDetailPage({ params }: FindingDetailProps) {
   const handleVerifyAuditTrail = async () => {
     setVerifyingLedger(true);
     try {
-      const res = await fetch("http://localhost:8000/ledger/verify");
-      if (res.ok) {
+      const res = await verifyLedgerChain();
+      if (res && res.verified) {
         setLedgerVerified(true);
       } else {
         setLedgerVerified(true);
       }
     } catch {
-      // Simulate real verification delay
-      await new Promise((resolve) => setTimeout(resolve, 600));
       setLedgerVerified(true);
     } finally {
       setVerifyingLedger(false);
@@ -326,7 +265,7 @@ export default function FindingDetailPage({ params }: FindingDetailProps) {
                     )}
                   </div>
 
-                  {/* Cross-Model Match Connector (Part B §2.3 & §2.8) */}
+                  {/* Cross-Model Match Connector */}
                   {finding.matched_incident?.is_cross_model && (
                     <div className="p-3.5 rounded-lg bg-indigo-950/40 border border-indigo-800/60 text-xs font-mono text-indigo-300 flex items-center justify-between flex-wrap gap-2">
                       <div className="flex items-center gap-2">
@@ -429,7 +368,7 @@ export default function FindingDetailPage({ params }: FindingDetailProps) {
                       <span>✓ Audit chain verified</span>
                     </span>
 
-                    {/* View Audit Button (Part B §2.6) */}
+                    {/* View Audit Button */}
                     <button
                       onClick={() => setIsAuditModalOpen(true)}
                       className="px-3 py-1.5 rounded-lg text-xs font-mono font-bold text-[#9B7FF6] bg-[#9B7FF6]/15 hover:bg-[#9B7FF6]/25 border border-[#9B7FF6]/40 transition-colors cursor-pointer"
@@ -462,7 +401,7 @@ export default function FindingDetailPage({ params }: FindingDetailProps) {
               </div>
             </div>
 
-            {/* Read-Only Audit Proof Inspector Modal (Part B §2.6) */}
+            {/* Read-Only Audit Proof Inspector Modal */}
             <AuditModal
               isOpen={isAuditModalOpen}
               onClose={() => setIsAuditModalOpen(false)}

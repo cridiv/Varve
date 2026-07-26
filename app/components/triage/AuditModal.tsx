@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useCallback } from "react";
+import { fetchLedgerEntriesForFinding } from "@/lib/api";
 
 export interface LedgerEntryRow {
   ledger_id: string;
@@ -215,29 +216,23 @@ export default function AuditModal({
   useEffect(() => {
     if (!isOpen) return;
 
-    async function fetchLedgerEntries() {
+    async function loadEntries() {
       setLoading(true);
       try {
-        const res = await fetch(`http://localhost:8000/ledger/findings/${findingId}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.entries && data.entries.length > 0) {
-            setEntries(data.entries);
-          } else {
-            throw new Error("No entries found");
-          }
+        const fetched = await fetchLedgerEntriesForFinding(findingId);
+        if (fetched && fetched.length > 0) {
+          setEntries(fetched);
         } else {
-          throw new Error("API unavailable");
+          setEntries(generateMockLedgerEntries(findingId, modelName));
         }
       } catch {
-        // Fallback to full 21-row audit ledger chain with rich decision payloads
         setEntries(generateMockLedgerEntries(findingId, modelName));
       } finally {
         setLoading(false);
       }
     }
 
-    fetchLedgerEntries();
+    loadEntries();
   }, [isOpen, findingId, modelName]);
 
   if (!isOpen) return null;

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { Finding, GroupedModelFinding, Severity, EvidenceScope } from "./types";
-import { MOCK_FINDINGS } from "./mockData";
+import { fetchRiskRankings } from "@/lib/api";
 import SummaryStatRow from "./SummaryStatRow";
 import PendingReviewPanel from "./PendingReviewPanel";
 import TriageRow from "./TriageRow";
@@ -16,43 +16,31 @@ export default function TriageDashboard({ onRefreshTrigger }: TriageDashboardPro
   const [findings, setFindings] = useState<Finding[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  // Fetch from GET /models/risk-ranking with mock fallback per Part B §1
-  const fetchRankings = useCallback(async () => {
+  // Fetch from GET /models/risk-ranking via unified API client (Part B §1)
+  const loadRankings = useCallback(async () => {
     setIsLoading(true);
-
     try {
-      const res = await fetch("http://localhost:8000/models/risk-ranking", {
-        headers: { Accept: "application/json" },
-        cache: "no-store",
-      });
-
-      if (!res.ok) {
-        throw new Error(`HTTP error ${res.status}`);
-      }
-
-      const data: Finding[] = await res.json();
+      const data = await fetchRiskRankings();
       setFindings(data);
     } catch (err) {
-      console.warn("Backend API unavailable, using offline empirical dataset:", err);
-      setFindings(MOCK_FINDINGS);
+      console.warn("Error fetching risk rankings:", err);
     } finally {
       setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchRankings();
-  }, [fetchRankings]);
+    loadRankings();
+  }, [loadRankings]);
 
-  // Expose refresh function to shell if needed
+  // Expose refresh function to shell
   useEffect(() => {
     if (onRefreshTrigger) {
-      onRefreshTrigger(fetchRankings, isLoading);
+      onRefreshTrigger(loadRankings, isLoading);
     }
-  }, [onRefreshTrigger, fetchRankings, isLoading]);
+  }, [onRefreshTrigger, loadRankings, isLoading]);
 
   // Priority score helper for sorting evidence tiers within same severity (Part B §3)
-  // org_wide/model (1) > actor (2) > industry_general (3)
   const getScopePriority = (scope: EvidenceScope): number => {
     switch (scope) {
       case "org_wide":
@@ -131,10 +119,7 @@ export default function TriageDashboard({ onRefreshTrigger }: TriageDashboardPro
       else low.push(item);
     });
 
-    // 4. Sort each section strictly per Part B §3:
-    //    Primary: Severity (already grouped)
-    //    Secondary: Evidence tier strength (org_wide > actor > industry_general)
-    //    Tertiary: Most recent created timestamp
+    // 4. Sort each section strictly per Part B §3
     const sortSection = (items: GroupedModelFinding[]) => {
       return items.sort((a, b) => {
         const fA = a.primaryFinding;
@@ -163,7 +148,7 @@ export default function TriageDashboard({ onRefreshTrigger }: TriageDashboardPro
       <SummaryStatRow findings={findings} />
 
       {/* 0.5 — Pending Review Panel (Candidate Incident Loop) */}
-      <PendingReviewPanel onCandidateActionSuccess={fetchRankings} />
+      <PendingReviewPanel onCandidateActionSuccess={loadRankings} />
 
       {/* Main Content Area */}
       {isLoading ? (

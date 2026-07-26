@@ -1,6 +1,11 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import {
+  fetchCandidateIncidents,
+  confirmCandidateIncident,
+  dismissCandidateIncident,
+} from "@/lib/api";
 
 export interface CandidateIncident {
   candidate_id: string;
@@ -19,22 +24,6 @@ interface PendingReviewPanelProps {
   onCandidateActionSuccess?: () => void;
 }
 
-// Empirical mock candidates for offline fallback
-const MOCK_CANDIDATE_INCIDENTS: CandidateIncident[] = [
-  {
-    candidate_id: "cand-101",
-    model_id: "urn:li:dataset:(urn:li:dataPlatform:dbt,b2fd91.ORDER_ENTRY_DB.analytics.order_details,PROD)",
-    anomaly_metric: "categorization_accuracy",
-    anomaly_value: 82.1,
-    anomaly_date: "2026-07-08T14:00:00Z",
-    candidate_event_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-    days_between: 14.0,
-    proposed_description: "Categorization accuracy dropped 14.1% following undocumented threshold change in customers dataset (14 days gap).",
-    status: "unconfirmed",
-    created_at: "2026-07-08T14:30:00Z",
-  },
-];
-
 export default function PendingReviewPanel({ onCandidateActionSuccess }: PendingReviewPanelProps) {
   const [candidates, setCandidates] = useState<CandidateIncident[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -44,18 +33,10 @@ export default function PendingReviewPanel({ onCandidateActionSuccess }: Pending
   const fetchCandidates = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:8000/candidate-incidents", {
-        cache: "no-store",
-      });
-      if (res.ok) {
-        const data: CandidateIncident[] = await res.json();
-        setCandidates(data);
-      } else {
-        throw new Error(`HTTP ${res.status}`);
-      }
-    } catch {
-      // Fallback to offline candidate mock
-      setCandidates(MOCK_CANDIDATE_INCIDENTS);
+      const data = await fetchCandidateIncidents();
+      setCandidates(data);
+    } catch (err) {
+      console.warn("Failed fetching candidates:", err);
     } finally {
       setLoading(false);
     }
@@ -68,13 +49,14 @@ export default function PendingReviewPanel({ onCandidateActionSuccess }: Pending
   const handleAction = async (candidate_id: string, action: "confirm" | "dismiss") => {
     setProcessingId(candidate_id);
     try {
-      await fetch(`http://localhost:8000/candidate-incidents/${candidate_id}/${action}`, {
-        method: "POST",
-      });
+      if (action === "confirm") {
+        await confirmCandidateIncident(candidate_id);
+      } else {
+        await dismissCandidateIncident(candidate_id);
+      }
     } catch (err) {
-      console.warn(`Fallback local handle for candidate ${action}:`, err);
+      console.warn(`Error handling candidate ${action}:`, err);
     } finally {
-      // Start exit animation
       setAnimatingOutIds((prev) => new Set(prev).add(candidate_id));
 
       setTimeout(() => {
@@ -86,7 +68,6 @@ export default function PendingReviewPanel({ onCandidateActionSuccess }: Pending
         });
         setProcessingId(null);
 
-        // Refetch main triage board & % org-validated stats
         if (onCandidateActionSuccess) {
           onCandidateActionSuccess();
         }
@@ -101,7 +82,7 @@ export default function PendingReviewPanel({ onCandidateActionSuccess }: Pending
 
   if (loading) {
     return (
-      <div className="p-3 bg-black border border-white/5 rounded-xl animate-pulse flex items-center justify-between text-xs text-zinc-500">
+      <div className="p-3 bg-black border border-[#1f2028] rounded-xl animate-pulse flex items-center justify-between text-xs text-zinc-500">
         <span>Loading candidate incidents...</span>
       </div>
     );
@@ -110,7 +91,7 @@ export default function PendingReviewPanel({ onCandidateActionSuccess }: Pending
   // Collapsed quiet state when zero pending candidates per Part B §0.5
   if (candidates.length === 0) {
     return (
-      <div className="px-4 py-2 bg-[#090a0d] border border-white/5 rounded-lg flex items-center justify-between text-xs text-zinc-500 font-mono">
+      <div className="px-4 py-2 bg-black border border-[#1f2028] rounded-lg flex items-center justify-between text-xs text-zinc-500 font-mono">
         <div className="flex items-center gap-2">
           <span className="w-1.5 h-1.5 rounded-full bg-zinc-600" />
           <span>No candidates awaiting review.</span>
@@ -148,7 +129,7 @@ export default function PendingReviewPanel({ onCandidateActionSuccess }: Pending
             >
               {/* Left Details */}
               <div className="flex items-start gap-3 min-w-0 flex-1">
-                {/* Quiet Activity Pulse Glyph */}
+                {/* Activity Pulse Glyph */}
                 <div className="w-2 h-2 rounded-full bg-amber-400 shrink-0 mt-1.5 animate-pulse" />
 
                 <div className="space-y-1 min-w-0 flex-1">
@@ -170,7 +151,7 @@ export default function PendingReviewPanel({ onCandidateActionSuccess }: Pending
                 </div>
               </div>
 
-              {/* Inline Action Buttons (Confirm & Dismiss) */}
+              {/* Inline Action Buttons */}
               <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
                 <button
                   onClick={() => handleAction(cand.candidate_id, "confirm")}

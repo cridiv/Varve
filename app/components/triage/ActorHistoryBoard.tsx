@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import Link from "next/link";
+import { fetchActorHistoryData } from "@/lib/api";
 
 export interface LinkedIncident {
   incident_id: string;
@@ -128,20 +128,17 @@ export default function ActorHistoryBoard({ actorName }: ActorHistoryBoardProps)
   const [data, setData] = useState<ActorHistoryResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
-  const fetchActorHistory = useCallback(async () => {
+  const loadActorHistory = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(`http://localhost:8000/patterns/by-actor/${encodeURIComponent(actorName)}`, {
-        cache: "no-store",
-      });
-      if (res.ok) {
-        const json = await res.json();
-        setData(json);
+      const result = await fetchActorHistoryData(actorName);
+      if (result) {
+        setData(result);
       } else {
-        throw new Error(`HTTP ${res.status}`);
+        const fallback = MOCK_ACTOR_DATASETS[actorName] || MOCK_ACTOR_DATASETS["J. Alvarez"];
+        setData(fallback);
       }
     } catch {
-      // Fallback offline actor dataset
       const fallback = MOCK_ACTOR_DATASETS[actorName] || MOCK_ACTOR_DATASETS["J. Alvarez"];
       setData(fallback);
     } finally {
@@ -150,8 +147,8 @@ export default function ActorHistoryBoard({ actorName }: ActorHistoryBoardProps)
   }, [actorName]);
 
   useEffect(() => {
-    fetchActorHistory();
-  }, [fetchActorHistory]);
+    loadActorHistory();
+  }, [loadActorHistory]);
 
   if (loading) {
     return (
