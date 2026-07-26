@@ -4,6 +4,7 @@ FastAPI Router for Audit Ledger Verification & Entries — Phase B
 
 import sys
 import os
+import json
 from fastapi import APIRouter, HTTPException
 
 service_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -46,12 +47,11 @@ def get_ledger_verification():
 @router.get("/entries/{finding_id}")
 def get_ledger_entries_by_finding(finding_id: str):
     """
-    Returns verified ledger entries filtered for a specific finding_id.
+    Returns verified ledger entries filtered for a specific finding_id with payload details.
     Exposed at GET /ledger/findings/{finding_id} (and GET /ledger/entries/{finding_id} alias).
     """
     try:
         res = verify_ledger_chain()
-        all_details = res.get("details", [])
         
         # Query raw entries from database for complete payload info
         with get_db_connection() as conn:
@@ -66,12 +66,14 @@ def get_ledger_entries_by_finding(finding_id: str):
 
         entries = []
         for r in rows:
+            p_obj = r["payload"] if isinstance(r["payload"], dict) else json.loads(r["payload"] or "{}")
             entries.append({
                 "ledger_id": str(r["ledger_id"]),
                 "event_type": r["event_type"],
                 "finding_id": str(r["finding_id"]),
                 "prev_hash": r["prev_hash"] or "0000000000000000000000000000000000000000000000000000000000000000",
                 "this_hash": r["this_hash"],
+                "payload": p_obj,
                 "created_at": r["created_at"].isoformat() if r["created_at"] else None,
                 "status": "PASS",
             })

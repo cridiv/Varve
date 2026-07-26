@@ -1,3 +1,7 @@
+"use client";
+
+import React from "react";
+import Link from "next/link";
 import Navbar from "@/components/Navbar";
 import VarveHeroAnimation from "@/components/VarveHeroAnimation";
 import LineageArchaeology from "@/components/LineageArchaeology";
@@ -8,15 +12,12 @@ import Footer from "@/components/Footer";
 
 export default function Home() {
   return (
-    <div className="min-h-screen bg-[#09090b] text-zinc-100 font-sans selection:bg-[#9B7FF6] selection:text-white flex flex-col justify-between overflow-x-hidden">
-      {/* Separated Navigation Header */}
+    <div className="relative min-h-screen bg-[#09090b] text-zinc-100 font-sans overflow-x-hidden selection:bg-[#9B7FF6] selection:text-white flex flex-col justify-between">
+      {/* Shared Navigation Header */}
       <Navbar />
 
-      {/* Hero Section (Left Content, Right 3D Animation) */}
+      {/* Hero Section */}
       <main className="relative w-full max-w-7xl mx-auto px-6 py-12 lg:py-20 my-auto">
-        {/* Ambient Backlight Behind 3D Scene */}
-        <div className="absolute top-1/2 -translate-y-1/2 right-[5%] w-[450px] h-[450px] bg-[#9B7FF6]/12 blur-[100px] rounded-full pointer-events-none z-0" />
-
         <div className="relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-8 items-center">
           {/* Left Column: Simple Clean Hero Content */}
           <div className="flex flex-col items-start text-left space-y-6">
@@ -39,16 +40,16 @@ export default function Home() {
 
             {/* Realistic 3D Dark Glass Buttons */}
             <div className="pt-2 flex flex-wrap items-center gap-4">
-              {/* Primary 3D Dark Glass Button */}
-              <a
-                href="#triage"
+              {/* Primary 3D Dark Glass Button -> Redirects to /triage */}
+              <Link
+                href="/triage"
                 className="relative group inline-flex items-center gap-2.5 px-7 py-3.5 rounded-xl font-semibold text-sm text-white transition-all cursor-pointer select-none border border-white/15 bg-gradient-to-b from-zinc-800/90 via-zinc-900/90 to-zinc-950/95 backdrop-blur-xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2),_0_4px_20px_-2px_rgba(0,0,0,0.6),_0_0_15px_-3px_rgba(155,127,246,0.25)] hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.35),_0_6px_25px_-2px_rgba(0,0,0,0.8),_0_0_22px_-2px_rgba(155,127,246,0.4)] hover:border-white/25 active:translate-y-[1px] active:shadow-inner"
               >
                 <span>Get Started</span>
                 <span className="group-hover:translate-x-0.5 transition-transform text-[#9B7FF6]">
                   &rarr;
                 </span>
-              </a>
+              </Link>
 
               {/* Secondary More Transparent 3D Glass Button */}
               <a
