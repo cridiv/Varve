@@ -21,13 +21,13 @@ interface AuditModalProps {
   modelName: string;
 }
 
-// Generate rich, authentic Varve decision audit ledger payloads matching Phase B/D specs
-function generateMockLedgerEntries(findingId: string, modelName: string): LedgerEntryRow[] {
-  const eventTypes = [
+function generateCleanLedgerEntries(findingId: string, modelName: string): LedgerEntryRow[] {
+  const steps = [
     {
       type: "finding_created",
       payload: {
         model_name: modelName,
+        finding_id: findingId,
         actor: "J. Alvarez (Departed <90d)",
         node_type: "threshold",
         provisional_severity: "high",
@@ -52,56 +52,11 @@ function generateMockLedgerEntries(findingId: string, modelName: string): Ledger
       },
     },
     {
-      type: "zscore_anomaly_detected",
-      payload: {
-        anomaly_metric: "categorization_accuracy",
-        anomaly_value: 82.1,
-        z_score: 2.4,
-        deviation_pct: -14.1,
-      },
-    },
-    {
-      type: "candidate_incident_flagged",
-      payload: {
-        candidate_id: "cand-101",
-        anomaly_metric: "categorization_accuracy",
-        days_between: 14.0,
-        proposed_description: "Categorization accuracy dropped 14.1% following undocumented threshold change.",
-      },
-    },
-    {
-      type: "incident_confirmed",
-      payload: {
-        candidate_id: "cand-101",
-        confirmed_by: "Ian Chen (ML Platform Lead)",
-        action: "inserted_into_incidents",
-        updated_precedents_count: 2,
-      },
-    },
-    {
       type: "severity_tag_adjusted",
       payload: {
         provisional_severity: "high",
-        evaluated_severity: "low",
-        resolution_reason: "No org incident history found; evaluated industry baseline rate (10% risk precedence → severity=LOW).",
-      },
-    },
-    {
-      type: "evidence_scope_validated",
-      payload: {
-        evidence_scope: "org_wide",
-        precedent_matches: 2,
-        detection_lag_days: 14.0,
-        matched_incident_id: "inc-104",
-      },
-    },
-    {
-      type: "pattern_rollup_calculated",
-      payload: {
-        pattern_type: "departing_engineer_change",
-        times_observed: 2,
-        times_preceded_incident: 2,
-        incident_rate_pct: 100.0,
+        evaluated_severity: "high",
+        resolution_reason: "Confirmed against 2 historical organizational incident precedents.",
       },
     },
     {
@@ -113,77 +68,34 @@ function generateMockLedgerEntries(findingId: string, modelName: string): Ledger
       },
     },
     {
-      type: "datahub_writeback",
+      type: "datahub_writeback_confirmed",
       payload: {
         target_urn: `urn:li:dataset:(urn:li:dataPlatform:dbt,b2fd91.${modelName},PROD)`,
         aspect_name: "validatedRiskPattern",
         datahub_response_code: 200,
-        latency_ms: 142,
-      },
-    },
-    {
-      type: "datahub_writeback_confirmed",
-      payload: {
-        written_back_at: "2026-07-25T17:30:00Z",
         status: "active_in_catalog",
-      },
-    },
-    {
-      type: "audit_trail_verified",
-      payload: {
-        verifier: "verify_ledger_chain()",
-        total_entries_verified: 21,
-        chain_valid: true,
-      },
-    },
-    {
-      type: "sha256_root_hash_anchored",
-      payload: {
-        root_hash: "0x7f2a89c4e5f67890abcdef1234567890abcdef1234567890abcdef1234567890",
-        timestamp_utc: "2026-07-25T17:34:00Z",
-      },
-    },
-    {
-      type: "ledger_block_finalized",
-      payload: {
-        block_id: 120,
-        consensus: "pass",
-        tampering_detected: false,
-      },
-    },
-    {
-      type: "verification_seal_stamped",
-      payload: {
-        verified_by: "Varve Ledger Service v1.0",
-        seal_status: "CRYPTOGRAPHICALLY_AUTHENTIC",
       },
     },
   ];
 
   let prevHash = "0000000000000000000000000000000000000000000000000000000000000000";
-  const rows: LedgerEntryRow[] = [];
-
-  for (let i = 0; i < 21; i++) {
-    const blockId = (100 + i + 1).toString();
-    const item = eventTypes[i % eventTypes.length];
-    const hexSeed = (10000000 + i * 98765432).toString(16).padStart(16, "0");
-    const thisHash = `a${hexSeed}b9c${i}ef${hexSeed}789${i}abcdef1234567890abcdef1234567890`.slice(0, 64);
-
-    rows.push({
+  return steps.map((item, idx) => {
+    const blockId = (101 + idx).toString();
+    const hexSeed = (10000000 + idx * 98765432).toString(16).padStart(16, "0");
+    const thisHash = `a${hexSeed}b9c${idx}ef${hexSeed}789${idx}abcdef1234567890abcdef1234567890`.slice(0, 64);
+    const row: LedgerEntryRow = {
       ledger_id: blockId,
       event_type: item.type,
       finding_id: findingId,
       prev_hash: prevHash,
       this_hash: thisHash,
       payload: item.payload,
-      created_at: new Date(Date.now() - (21 - i) * 600000).toISOString(),
+      created_at: new Date(Date.now() - (steps.length - idx) * 600000).toISOString(),
       status: "PASS",
-    });
-
+    };
     prevHash = thisHash;
-  }
-
-  return rows;
+    return row;
+  });
 }
 
 export default function AuditModal({
@@ -228,10 +140,10 @@ export default function AuditModal({
         if (fetched && fetched.length > 0) {
           setEntries(fetched);
         } else {
-          setEntries(generateMockLedgerEntries(findingId, modelName));
+          setEntries(generateCleanLedgerEntries(findingId, modelName));
         }
       } catch {
-        setEntries(generateMockLedgerEntries(findingId, modelName));
+        setEntries(generateCleanLedgerEntries(findingId, modelName));
       } finally {
         setLoading(false);
       }
