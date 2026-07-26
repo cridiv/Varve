@@ -64,8 +64,22 @@ def get_ledger_entries_by_finding(finding_id: str):
                 """, (finding_id,))
                 rows = [dict(r) for r in cur.fetchall()]
 
-        entries = []
+        # Clean & filter rapid duplicate click noise (within 10 seconds of same event_type)
+        filtered_rows = []
+        last_seen_by_type = {}
+
         for r in rows:
+            ev_type = r["event_type"]
+            created = r["created_at"]
+            if ev_type in last_seen_by_type:
+                last_created = last_seen_by_type[ev_type]
+                if created and last_created and (created - last_created).total_seconds() < 10:
+                    continue
+            last_seen_by_type[ev_type] = created
+            filtered_rows.append(r)
+
+        entries = []
+        for r in filtered_rows:
             p_obj = r["payload"] if isinstance(r["payload"], dict) else json.loads(r["payload"] or "{}")
             entries.append({
                 "ledger_id": str(r["ledger_id"]),

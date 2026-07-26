@@ -21,21 +21,22 @@ service/
 ├── db/
 │   ├── __init__.py
 │   ├── connection.py             # Shared PostgreSQL connection manager (RealDictCursor)
-│   ├── schema.sql                # DDL schema definitions (lineage_events, business_metrics, incidents, findings, patterns, ledger, candidate_incidents)
+│   ├── schema.sql                # DDL schema definitions (lineage_events, business_metrics, incidents, findings, patterns, ledger, candidate_incidents, actor_owner_mappings)
 │   └── seed.sql                  # Ground truth seed narratives 1-4 + industry_general baselines
 ├── services/                     # Core business logic domain
 │   ├── __init__.py
 │   ├── correlation_service.py    # Correlation engine, 5-tier trust hierarchy & ground-truth benchmark
-│   ├── generator_service.py      # LLM narrative synthesis (StepFun AI) & findings population
+│   ├── generator_service.py      # LLM narrative synthesis & findings population
 │   ├── datahub_service.py        # DataHub GMS write-back, DataHub Ownership & Governance Tag resolution
+│   ├── actor_resolution_service.py # Actor identity resolution engine & DataHub Corpuser URN mapping
 │   ├── ledger_service.py         # Cryptographic SHA-256 hash-chained audit ledger engine
 │   ├── validation_service.py    # Automatic validation report generator for docs/validation.md
 │   └── anomaly_service.py       # Rolling Z-score anomaly detection & candidate incident discovery
 ├── api/                          # FastAPI modular routers
 │   ├── __init__.py
-│   ├── health.py                 # GET /health
+│   ├── health.py                 # GET /health, POST /datahub/connect, POST /datahub/connect/step/*
 │   ├── findings.py               # GET /models/risk-ranking, GET /findings/{id}, GET /findings/by-team/{team}, POST /findings/{id}/writeback
-│   ├── patterns.py               # GET /patterns/by-actor/{actor}
+│   ├── patterns.py               # GET /patterns/by-actor/{actor}, POST /actors/resolve, GET /actors/mappings
 │   ├── ledger.py                 # GET /ledger/verify (audit chain integrity check)
 │   ├── validation.py             # GET /validation/report (on-demand benchmark & doc update)
 │   └── candidates.py             # GET /candidate-incidents, POST /candidate-incidents/{id}/confirm, POST /candidate-incidents/{id}/dismiss
@@ -84,7 +85,7 @@ service/
   - `POST /candidate-incidents/{id}/confirm`: Creates a real `incidents` row, logs `incident_confirmed` in ledger, and updates `patterns` rollups immediately.
   - `POST /candidate-incidents/{id}/dismiss`: Logs `incident_dismissed` in audit ledger as free negative evidence.
 
-### Phase E — Governance, Routing & Tag Honesty Labeling (New)
+### Phase E — Governance, Routing & Tag Honesty Labeling
 - **Automated DataHub Owner Resolution**: `resolve_dataset_routed_owner()` querying DataHub `OwnershipClass` aspect with strict priority:
   1. Specific individual owner (non-EMP006) $\rightarrow$ `jonny1 (Data Owner)`, `patrick1 (Data Owner)`
   2. Accountable Director fallback (EMP006) $\rightarrow$ `Ian Chen (Director of Data Engineering)`
@@ -100,6 +101,32 @@ service/
     - `inferred` $\rightarrow$ `"Inferred from Schema (Heuristic Fallback)"`
     - `none` $\rightarrow$ `"Untagged"`
 - **False-Positive Exclusion Engine**: Harmless/deprecated/test datasets (`survey`, `archive`, `deprecated`, `temp`, `test`, `dummy`, `mock`, `sandbox`) are automatically excluded from heuristic auto-detection to prevent false positives.
+
+### Phase F — DataHub Connect Flow & Step-by-Step Verification (New)
+- **DataHub Authentication**: `POST /datahub/connect` verifying DataHub server-side HTTP credentials against `/logIn`.
+- **Live 5-Step Connection Pipeline**:
+  - `POST /datahub/connect/step/gms`: Verifies GMS connection & server health.
+  - `POST /datahub/connect/step/lineage`: Queries DataHub graph for lineage dataset URNs.
+  - `POST /datahub/connect/step/ownership`: Resolves DataHub dataset ownership aspect.
+  - `POST /datahub/connect/step/governance`: Checks DataHub governance tags and severity multipliers.
+  - `POST /datahub/connect/step/incidents`: Evaluates historical organizational incidents (cold-start baseline indicator).
+
+### Phase G — Actor Identity Resolution & Corpuser Mapping (New)
+- **Identity Space Bridge (`actor_resolution_service.py`)**: Resolves free-text `lineage_events.actor` names (`"J. Alvarez"`, `"K. Vance"`, `"Ian Chen"`) to DataHub owner URNs (`urn:li:corpuser:EMP006`, `urn:li:corpuser:jonny1`, `urn:li:corpuser:k_vance`).
+- **Database Table (`actor_owner_mappings`)**: Stores `lineage_actor`, `datahub_owner_urn`, `datahub_display_name`, `match_type`, `created_at`.
+- **3-Layer Resolution Engine**:
+  1. Dynamic database & DataHub GMS corpuser lookup.
+  2. First initial + last name matching (e.g. `J. Alvarez` $\rightarrow$ `jonny1`, `I. Chen` $\rightarrow$ `Ian Chen`).
+  3. Standardized fallback URN construction for unknown actors (`urn:li:corpuser:{slug}`).
+- **Identity Resolution Endpoints**:
+  - `POST /actors/resolve`: Runs identity resolution step across all lineage actors and updates `actor_owner_mappings`.
+  - `GET /actors/mappings`: Retrieves all stored identity mappings.
+  - `GET /patterns/by-actor/{actor}`: Dynamically resolves identity and returns cross-model authoring events + owned dataset findings + DataHub owner URN badge.
+
+### Phase H — Frontend Live Data Integration (New)
+- **Live Risk Triage Console (`RiskTriageList.tsx`)**: 100% connected to `GET /models/risk-ranking` and `POST /findings/{id}/writeback` without local mock data.
+- **Actor History Board (`ActorHistoryBoard.tsx`)**: Displays resolved DataHub Corpuser URN badges (`urn:li:corpuser:EMP006`).
+- **Actor Profile Selector (`app/app/actors/page.tsx`)**: Merges lineage authors and DataHub Owners (`Ian Chen`, `jonny1`, `patrick1`) into unified profile selection bar.
 
 ---
 
@@ -135,7 +162,37 @@ Total seeded events evaluated: 5
 ✅ GROUND TRUTH BENCHMARK PASSED: 5/5 events matched expectations.
 ```
 
-### 2. Audit Ledger Chain Verification (`python service/scripts/verify_ledger.py`)
+### 2. Actor Identity Resolution Verification (`POST /actors/resolve`)
+```json
+[
+  {
+    "lineage_actor": "Ian Chen",
+    "datahub_owner_urn": "urn:li:corpuser:EMP006",
+    "datahub_display_name": "Ian Chen (Director of Data Engineering)",
+    "match_type": "exact_display_match"
+  },
+  {
+    "lineage_actor": "J. Alvarez",
+    "datahub_owner_urn": "urn:li:corpuser:jonny1",
+    "datahub_display_name": "jonny1 (Data Owner)",
+    "match_type": "alias_keyword_match"
+  },
+  {
+    "lineage_actor": "K. Vance",
+    "datahub_owner_urn": "urn:li:corpuser:k_vance",
+    "datahub_display_name": "K. Vance (Data Owner)",
+    "match_type": "exact_display_match"
+  },
+  {
+    "lineage_actor": "Alice Cooper",
+    "datahub_owner_urn": "urn:li:corpuser:alice_cooper",
+    "datahub_display_name": "Alice Cooper (Data Owner)",
+    "match_type": "constructed_corpuser_urn"
+  }
+]
+```
+
+### 3. Audit Ledger Chain Verification (`python service/scripts/verify_ledger.py`)
 ```text
 =======================================================
       VARVE AUDIT LEDGER — HASH CHAIN VERIFIER         
@@ -153,33 +210,17 @@ Verifying 38 ledger entries sequentially...
   Zero tampering detected. All decision records are mathematically authentic.
 ```
 
-### 3. DataHub Governance Multipliers & Tag Honesty Labeling (`GET /models/risk-ranking`)
-```text
-=== VERIFYING TAG SOURCE HONESTY LABELING (E2.2) ===
-► Model: customers    | Multiplier: 1.5x | Tag Source: inferred  | Label: 'Inferred from Schema (Heuristic Fallback)'
-► Model: addresses    | Multiplier: 1.3x | Tag Source: inferred  | Label: 'Inferred from Schema (Heuristic Fallback)'
-► Model: order_items  | Multiplier: 1.5x | Tag Source: inferred  | Label: 'Inferred from Schema (Heuristic Fallback)'
-► Model: products     | Multiplier: 1.0x | Tag Source: none      | Label: 'Untagged'
-► Model: countries    | Multiplier: 1.0x | Tag Source: none      | Label: 'Untagged'
-► Model: inventory    | Multiplier: 1.0x | Tag Source: none      | Label: 'Untagged'
-```
-
-### 4. Stress-Testing Semantic Inference Exclusion Filters
-```text
-=== STRESS-TESTING SEMANTIC INFERENCE EXCLUSION FILTERS ===
-► Dataset: customers                                    | Multiplier: 1.5x | Source: inferred   | Tags: ['PII', 'business-critical']
-► Dataset: customer_satisfaction_survey_archive_deprecated | Multiplier: 1.0x | Source: none       | Tags: []
-► Dataset: test_addresses_dummy                         | Multiplier: 1.0x | Source: none       | Tags: []
-► Dataset: order_items_temp                             | Multiplier: 1.0x | Source: none       | Tags: []
-► Dataset: order_items                                  | Multiplier: 1.5x | Source: inferred   | Tags: ['business-critical']
-```
-
-### 5. Complete REST API Endpoint Coverage
+### 4. Complete REST API Endpoint Coverage
 - **`GET /health`** -> 200 OK
+- **`POST /datahub/connect`** -> 200 OK
+- **`POST /datahub/connect/step/{stepKey}`** -> 200 OK (`gms`, `lineage`, `ownership`, `governance`, `incidents`)
 - **`GET /models/risk-ranking`** -> 200 OK
 - **`GET /findings/{id}`** -> 200 OK
 - **`GET /findings/by-team/{team}`** -> 200 OK
 - **`POST /findings/{id}/writeback`** -> 200 OK (Aspect verified on DataHub GMS)
+- **`POST /actors/resolve`** -> 200 OK (Runs resolution step & stores mappings)
+- **`GET /actors/mappings`** -> 200 OK (Returns stored identity mappings)
+- **`GET /patterns/by-actor/{actor}`** -> 200 OK (Identity-resolved cross-model analytics)
 - **`GET /ledger/verify`** -> 200 OK (`{"verified": true, "entries_checked": N}`)
 - **`GET /validation/report`** -> 200 OK (`{"summary": {"total": 5, "passed": 5, "failed": 0, "all_passed": true}}`)
 - **`GET /candidate-incidents`** -> 200 OK (Returns unconfirmed candidates)

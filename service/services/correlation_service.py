@@ -87,10 +87,21 @@ def get_actor_cross_model_incidents(actor: str) -> List[Dict[str, Any]]:
 
 def get_all_actor_events(actor: str) -> List[Dict[str, Any]]:
     """
-    Returns all lineage events for a given actor across all models.
+    Returns all lineage events for a given actor across all models,
+    including resolution of mapped DataHub owner names or aliases.
     """
+    mapped_owner_urn = ""
+    mapped_display_name = ""
+    try:
+        from services.actor_resolution_service import match_actor_to_datahub_owner
+        resolved = match_actor_to_datahub_owner(actor)
+        mapped_owner_urn = resolved["datahub_owner_urn"]
+        mapped_display_name = resolved["datahub_display_name"]
+    except Exception as e:
+        print(f"[warning] Actor identity resolution fallback: {e}")
+
     query = """
-        SELECT
+        SELECT DISTINCT
             e.event_id,
             e.model_id,
             e.node_type,
@@ -108,14 +119,23 @@ def get_all_actor_events(actor: str) -> List[Dict[str, Any]]:
             EXTRACT(EPOCH FROM (i.detected_at - e.event_timestamp)) / 86400.0 AS detection_lag_days
         FROM lineage_events e
         LEFT JOIN incidents i ON i.root_cause_event_id = e.event_id
-        WHERE e.actor = %s
+        LEFT JOIN findings f ON f.related_event_id = e.event_id
+        LEFT JOIN actor_owner_mappings m ON LOWER(m.lineage_actor) = LOWER(e.actor)
+        WHERE LOWER(e.actor) = LOWER(%s)
+           OR (m.datahub_display_name IS NOT NULL AND LOWER(m.datahub_display_name) LIKE LOWER(%s))
+           OR (%s != '' AND LOWER(f.routed_to_team) LIKE LOWER(%s))
         ORDER BY e.event_timestamp;
     """
+    actor_param = actor
+    disp_param = f"%{mapped_display_name.split('(')[0].strip()}%" if mapped_display_name else f"%{actor}%"
+    routed_param = f"%{actor.split('(')[0].strip()}%"
+
     with get_db_connection() as conn:
         with conn.cursor() as cur:
-            cur.execute(query, (actor,))
+            cur.execute(query, (actor_param, disp_param, actor, routed_param))
             rows = cur.fetchall()
             return [dict(r) for r in rows]
+
 
 
 # ---------------------------------------------------------------------------

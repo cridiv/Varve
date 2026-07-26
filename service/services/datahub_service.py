@@ -278,18 +278,34 @@ def writeback_finding_to_datahub(finding_id: str) -> Dict[str, Any]:
 
     print(f"✅ Write-back successful! Updated written_back_at timestamp in database.")
 
-    # B2.2 Ledger event: writeback
-    append_to_ledger(
-        event_type="writeback",
-        finding_id=finding_id,
-        payload={
-            "model_id": finding["model_id"],
-            "dataset_urn": dataset_urn,
-            "annotation_text": annotation_text,
-            "link_url": finding_link_url,
-            "status": "written_back",
-        }
-    )
+    # B2.2 Ledger event: writeback (throttles rapid duplicate clicks within 10 seconds)
+    recent_writeback = False
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT COUNT(*) as cnt FROM ledger 
+                    WHERE finding_id = %s AND event_type = 'writeback'
+                      AND created_at > (NOW() - INTERVAL '10 seconds');
+                """, (finding_id,))
+                row = cur.fetchone()
+                if row and row.get("cnt", 0) > 0:
+                    recent_writeback = True
+    except Exception as e:
+        print(f"[warning] Check writeback ledger throttle fallback: {e}")
+
+    if not recent_writeback:
+        append_to_ledger(
+            event_type="writeback",
+            finding_id=finding_id,
+            payload={
+                "model_id": finding["model_id"],
+                "dataset_urn": dataset_urn,
+                "annotation_text": annotation_text,
+                "link_url": finding_link_url,
+                "status": "written_back",
+            }
+        )
 
     return {
         "finding_id": finding_id,

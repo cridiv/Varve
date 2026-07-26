@@ -86,6 +86,37 @@ export default function RiskTriageList() {
     try {
       await triggerWriteback(selectedFinding.id);
       setActionEmitted(true);
+      // Reload findings to reflect written_back status & updated audit chain
+      const rawList = await fetchRiskRankings();
+      if (rawList && rawList.length > 0) {
+        const mapped: Finding[] = rawList.map((f: any) => {
+          const sev = (f.severity || "low").toUpperCase() as "HIGH" | "MEDIUM" | "LOW";
+          let tier: "ORG-VALIDATED" | "UNVALIDATED" | "INDUSTRY-GENERAL" = "UNVALIDATED";
+          if (f.evidence_scope === "org_wide" || f.evidence_scope === "model" || f.evidence_scope === "actor") {
+            tier = "ORG-VALIDATED";
+          } else if (f.evidence_scope === "industry_general") {
+            tier = "INDUSTRY-GENERAL";
+          }
+
+          return {
+            id: f.finding_id,
+            modelName: f.model_name || f.model_id,
+            severity: sev,
+            evidenceTier: tier,
+            summary: f.summary,
+            details: f.recommended_action || f.summary,
+            precedent: f.evidence_label || "Backed by company-wide pattern history",
+            precedentCount: (f.evidence_scope === "model" || f.evidence_scope === "actor") ? 2 : 0,
+            avgLagDays: 14,
+            owner: f.routed_to_team || "Ian Chen (Director of Data Engineering)",
+            hash: `${f.finding_id.slice(0, 5)}...${f.finding_id.slice(-4)}`,
+            actor: f.actor || "Unknown",
+            changeDate: getRelativeTimeString(f.event_timestamp || ""),
+            lineagePath: f.model_id,
+          };
+        });
+        setFindings(mapped);
+      }
       setTimeout(() => setActionEmitted(false), 2500);
     } catch (err) {
       console.warn("DataHub writeback error:", err);

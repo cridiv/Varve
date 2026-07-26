@@ -4,7 +4,7 @@ import React, { useState, useEffect, use } from "react";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 import AuditModal from "@/components/triage/AuditModal";
 import Link from "next/link";
-import { fetchFindingDetail, verifyLedgerChain } from "@/lib/api";
+import { fetchFindingDetail, verifyLedgerChain, triggerWriteback } from "@/lib/api";
 
 interface FindingDetailProps {
   params: Promise<{ id: string }>;
@@ -405,24 +405,29 @@ export default function FindingDetailPage({ params }: FindingDetailProps) {
                 )}
               </div>
 
-              {/* 2.7 — Write-Back Status */}
+              {/* 2.7 — Write-Back Status & Interactive Emit Action */}
               <div className="text-zinc-400 font-mono text-[11px]">
                 {finding.written_back ? (
                   <div className="flex items-center gap-2">
-                    <span className="text-emerald-400">
-                      ✓ Written back to DataHub ({finding.written_back_at || "2026-07-25"})
+                    <span className="text-emerald-400 font-semibold">
+                      ✓ Written back to DataHub ({finding.written_back_at ? new Date(finding.written_back_at).toLocaleDateString() : "Verified"})
                     </span>
-                    <a
-                      href={`https://datahub.company.internal/dataset/${encodeURIComponent(finding.model_id)}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-indigo-400 hover:text-white underline"
-                    >
-                      [DataHub Node &rarr;]
-                    </a>
                   </div>
                 ) : (
-                  <span className="text-zinc-500">Not yet written back</span>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await triggerWriteback(findingId);
+                        const updated = await fetchFindingDetail(findingId);
+                        setFinding(updated);
+                      } catch (err) {
+                        console.warn("Writeback error:", err);
+                      }
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-mono font-bold text-white bg-indigo-950/80 hover:bg-indigo-900 border border-indigo-700 transition-all cursor-pointer shadow-sm"
+                  >
+                    Emit to DataHub &rarr;
+                  </button>
                 )}
               </div>
             </div>
