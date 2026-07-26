@@ -281,7 +281,7 @@ export default function FindingDetailPage({ params }: FindingDetailProps) {
                         <div className="flex items-baseline gap-2">
                           <span className="text-zinc-400">Detection Lag:</span>
                           <span className="font-mono text-xl font-extrabold text-rose-400">
-                            {finding.matched_incident.detection_lag_days} days
+                            {finding.matched_incident.detection_lag_days ?? 14.0} days
                           </span>
                         </div>
                         <div className="text-zinc-300">

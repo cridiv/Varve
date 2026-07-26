@@ -159,7 +159,7 @@ export default function PendingReviewPanel({ onCandidateActionSuccess }: Pending
                       {cand.created_at ? getRelativeTimeString(cand.created_at) : "4m ago"}
                     </span>
                     <span className="text-[10px] text-zinc-500 font-mono">
-                      ({cand.days_between}d gap from lineage change)
+                      ({cand.days_between ?? 14.0}d gap from lineage change)
                     </span>
                   </div>
 

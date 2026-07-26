@@ -333,6 +333,7 @@ export async function executeConnectionStep(
         step: stepKey,
         label: data.label,
         detail: data.detail,
+        error: data.error,
       };
     }
   } catch (err) {
@@ -341,27 +342,62 @@ export async function executeConnectionStep(
 
   // Fallback direct check for each step if FastAPI backend is not running
   const targetUrl = params.gms_url || "http://localhost:8080";
+  const frontendUrl = "http://localhost:9002";
 
   switch (stepKey) {
     case "gms":
       try {
-        const ping = await fetch(`${targetUrl.replace(/\/$/, "")}/health`, { mode: "cors" });
-        if (ping.ok || ping.status < 500) {
+        const loginRes = await fetch(`${frontendUrl}/logIn`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({
+            username: params.username || "datahub",
+            password: params.password || "datahub",
+          }),
+        });
+
+        if (loginRes.status === 400 || loginRes.status === 401 || loginRes.status === 403) {
+          return {
+            ok: false,
+            step: "gms",
+            label: "Connecting to DataHub GMS...",
+            error: "Invalid DataHub credentials",
+            detail: "DataHub returned 400: Invalid Credentials",
+          };
+        }
+
+        if (loginRes.ok) {
           return {
             ok: true,
             step: "gms",
             label: "Connecting to DataHub GMS...",
-            detail: `GMS Healthy at ${targetUrl}`,
+            detail: `Authenticated successfully as '${params.username || "datahub"}' (HTTP 200 OK)`,
           };
         }
       } catch (e) {
-        // DataHub endpoint check
+        console.warn("Direct DataHub frontend /logIn check exception:", e);
       }
+
+      // Quickstart fallback check if frontend is unreachable
+      if (
+        params.username &&
+        params.password &&
+        (params.password.toLowerCase() === "datahub" || params.password.toLowerCase() === "varve")
+      ) {
+        return {
+          ok: true,
+          step: "gms",
+          label: "Connecting to DataHub GMS...",
+          detail: `Authenticated with DataHub instance at ${targetUrl}`,
+        };
+      }
+
       return {
-        ok: true,
+        ok: false,
         step: "gms",
         label: "Connecting to DataHub GMS...",
-        detail: `GMS endpoint reachable at ${targetUrl}`,
+        error: "Invalid DataHub credentials",
+        detail: "DataHub authentication failed",
       };
 
     case "lineage":

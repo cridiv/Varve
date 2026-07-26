@@ -50,11 +50,12 @@ export default function ConnectPage() {
   const [gmsUrl, setGmsUrl] = useState<string>(
     process.env.NEXT_PUBLIC_DATAHUB_GMS_URL || "http://localhost:8080"
   );
-  const [username, setUsername] = useState<string>("varve");
-  const [password, setPassword] = useState<string>("varve");
+  const [username, setUsername] = useState<string>("datahub");
+  const [password, setPassword] = useState<string>("datahub");
 
   // Connection Workflow State
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [formError, setFormError] = useState<string | null>(null);
   const [steps, setSteps] = useState<StepState[]>(INITIAL_STEPS);
   const [activeStepIndex, setActiveStepIndex] = useState<number>(-1);
   const [isComplete, setIsComplete] = useState<boolean>(false);
@@ -109,32 +110,38 @@ export default function ConnectPage() {
           );
           setSteps(currentSteps);
         } else {
-          // Step genuine failure state
+          // Step genuine failure state (e.g. Invalid DataHub credentials)
+          const errText = result.error || "Invalid DataHub credentials";
+          setFormError(errText);
           currentSteps = currentSteps.map((s, idx) =>
             idx === i
               ? {
                   ...s,
                   status: "error",
-                  errorMsg: result.error || `Failed to connect to DataHub step '${stepKey}'.`,
+                  errorMsg: errText,
                 }
               : s
           );
           setSteps(currentSteps);
           setIsSubmitting(false);
-          return; // Stop sequence on error for retry
+          setActiveStepIndex(-1); // Return form to visible state with error banner
+          return; // Stop sequence on error for user correction
         }
       } catch (err: any) {
+        const errText = err.message || "Backend network request failed.";
+        setFormError(errText);
         currentSteps = currentSteps.map((s, idx) =>
           idx === i
             ? {
                 ...s,
                 status: "error",
-                errorMsg: err.message || "Backend network request failed.",
+                errorMsg: errText,
               }
             : s
         );
         setSteps(currentSteps);
         setIsSubmitting(false);
+        setActiveStepIndex(-1);
         return;
       }
     }
@@ -143,7 +150,7 @@ export default function ConnectPage() {
     setIsComplete(true);
 
     // Store minimal identity info in localStorage for Screen 1 top-bar avatar (Section 4 Spec)
-    const displayName = username === "varve" ? "Ian Chen" : username;
+    const displayName = username === "datahub" || username === "varve" ? "Ian Chen" : username;
     const initials = computeInitials(displayName);
     const identityObj = {
       username,
@@ -165,6 +172,7 @@ export default function ConnectPage() {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
     setSteps(INITIAL_STEPS);
     setIsComplete(false);
     runConnectionSequence(0);
@@ -244,6 +252,17 @@ export default function ConnectPage() {
                 />
               </div>
             </div>
+
+            {/* Real DataHub Authentication Error Banner */}
+            {formError && (
+              <div className="p-3.5 rounded-xl bg-rose-950/80 border border-rose-500/40 text-rose-300 text-xs font-mono flex items-start gap-2.5 animate-in fade-in duration-200">
+                <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0 mt-1 animate-ping" />
+                <div className="flex-1">
+                  <strong className="block text-rose-200 font-bold mb-0.5">Authentication Failed</strong>
+                  <span>{formError} — please check your DataHub username & password.</span>
+                </div>
+              </div>
+            )}
 
             {/* Submit Action Button */}
             <button
