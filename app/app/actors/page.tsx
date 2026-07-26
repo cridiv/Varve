@@ -4,45 +4,85 @@ import React, { useState, useEffect, Suspense } from "react";
 import { useSearchParams } from "next/navigation";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 import ActorHistoryBoard from "@/components/triage/ActorHistoryBoard";
+import { fetchRiskRankings } from "@/lib/api";
 
 function ActorHistoryContent() {
   const searchParams = useSearchParams();
   const actorParam = searchParams.get("actor");
 
-  const [selectedActor, setSelectedActor] = useState<string>("J. Alvarez");
+  const [actors, setActors] = useState<string[]>([]);
+  const [selectedActor, setSelectedActor] = useState<string>("");
 
   useEffect(() => {
-    if (actorParam) {
-      setSelectedActor(actorParam);
-    }
-  }, [actorParam]);
+    async function loadActorsFromLineage() {
+      try {
+        const findings = await fetchRiskRankings();
+        const extracted = new Set<string>();
 
-  const actors = ["J. Alvarez", "R. Chen"];
+        findings.forEach((f) => {
+          if (f.actor) {
+            const clean = f.actor.replace(/\s*\(Departed.*?\)/i, "").trim();
+            if (clean) extracted.add(clean);
+          }
+        });
+
+        if (actorParam) {
+          const cleanParam = actorParam.replace(/\s*\(Departed.*?\)/i, "").trim();
+          if (cleanParam) extracted.add(cleanParam);
+        }
+
+        const actorList = Array.from(extracted);
+        setActors(actorList);
+
+        if (actorList.length > 0) {
+          const initial = actorParam
+            ? actorParam.replace(/\s*\(Departed.*?\)/i, "").trim()
+            : actorList[0];
+          setSelectedActor(initial);
+        } else if (actorParam) {
+          const cleanParam = actorParam.replace(/\s*\(Departed.*?\)/i, "").trim();
+          setSelectedActor(cleanParam);
+        }
+      } catch (err) {
+        console.warn("Failed extracting actors from lineage findings:", err);
+      }
+    }
+
+    loadActorsFromLineage();
+  }, [actorParam]);
 
   return (
     <div className="space-y-6">
-      {/* Quick Actor Selector Bar */}
-      <div className="flex items-center gap-2 pb-2 border-b border-zinc-800/80">
-        <span className="text-xs font-mono text-zinc-500 uppercase mr-2">
-          Select Actor Profile:
-        </span>
-        {actors.map((actor) => (
-          <button
-            key={actor}
-            onClick={() => setSelectedActor(actor)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
-              selectedActor === actor
-                ? "bg-[#9B7FF6]/20 text-[#9B7FF6] border border-[#9B7FF6]/40 shadow-[0_0_12px_rgba(155,127,246,0.2)]"
-                : "bg-black text-zinc-400 hover:text-zinc-200 border border-zinc-800"
-            }`}
-          >
-            {actor}
-          </button>
-        ))}
-      </div>
+      {/* Dynamic Actor Selector Bar — Extracted Directly from Lineage Data */}
+      {actors.length > 0 && (
+        <div className="flex items-center gap-2 pb-2 border-b border-zinc-800/80 flex-wrap">
+          <span className="text-xs font-mono text-zinc-500 uppercase mr-2">
+            Select Actor Profile:
+          </span>
+          {actors.map((actor) => (
+            <button
+              key={actor}
+              onClick={() => setSelectedActor(actor)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition-all cursor-pointer ${
+                selectedActor === actor
+                  ? "bg-[#9B7FF6]/20 text-[#9B7FF6] border border-[#9B7FF6]/40 shadow-[0_0_12px_rgba(155,127,246,0.2)]"
+                  : "bg-black text-zinc-400 hover:text-zinc-200 border border-zinc-800"
+              }`}
+            >
+              {actor}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Main Screen 3 Board */}
-      <ActorHistoryBoard actorName={selectedActor} />
+      {selectedActor ? (
+        <ActorHistoryBoard actorName={selectedActor} />
+      ) : (
+        <div className="p-8 text-center text-xs font-mono text-zinc-500">
+          No actor lineage history found.
+        </div>
+      )}
     </div>
   );
 }
@@ -50,7 +90,7 @@ function ActorHistoryContent() {
 export default function ActorHistoryPage() {
   return (
     <DashboardShell activeBreadcrumb="/ actor">
-      <Suspense fallback={<div className="p-8 text-center text-xs font-mono text-zinc-500">Loading actor history...</div>}>
+      <Suspense fallback={<div className="p-8 text-center text-xs font-mono text-zinc-500">Loading actor lineage history...</div>}>
         <ActorHistoryContent />
       </Suspense>
     </DashboardShell>

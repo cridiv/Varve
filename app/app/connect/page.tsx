@@ -159,6 +159,7 @@ export default function ConnectPage() {
       role: "ML Platform Lead",
     };
     try {
+      localStorage.clear();
       localStorage.setItem("varve_user_identity", JSON.stringify(identityObj));
     } catch {
       // localStorage fallback

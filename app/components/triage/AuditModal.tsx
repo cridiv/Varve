@@ -21,83 +21,6 @@ interface AuditModalProps {
   modelName: string;
 }
 
-function generateCleanLedgerEntries(findingId: string, modelName: string): LedgerEntryRow[] {
-  const steps = [
-    {
-      type: "finding_created",
-      payload: {
-        model_name: modelName,
-        finding_id: findingId,
-        actor: "J. Alvarez (Departed <90d)",
-        node_type: "threshold",
-        provisional_severity: "high",
-        rule_matched: "unreviewed_threshold_change",
-      },
-    },
-    {
-      type: "lineage_event_ingested",
-      payload: {
-        event_id: "evt-9042",
-        node_type: "pipeline_step",
-        actor: "J. Alvarez",
-        documentation_present: false,
-      },
-    },
-    {
-      type: "ownership_routed",
-      payload: {
-        routed_to_team: "Ian Chen (Director of Data Engineering)",
-        auto_assigned: true,
-        routing_strategy: "datahub_ownership_aspect",
-      },
-    },
-    {
-      type: "severity_tag_adjusted",
-      payload: {
-        provisional_severity: "high",
-        evaluated_severity: "high",
-        resolution_reason: "Confirmed against 2 historical organizational incident precedents.",
-      },
-    },
-    {
-      type: "governance_tag_evaluated",
-      payload: {
-        governance_tag: "PII / Business-Critical",
-        severity_multiplier: 1.5,
-        tag_source: "datahub_native",
-      },
-    },
-    {
-      type: "datahub_writeback_confirmed",
-      payload: {
-        target_urn: `urn:li:dataset:(urn:li:dataPlatform:dbt,b2fd91.${modelName},PROD)`,
-        aspect_name: "validatedRiskPattern",
-        datahub_response_code: 200,
-        status: "active_in_catalog",
-      },
-    },
-  ];
-
-  let prevHash = "0000000000000000000000000000000000000000000000000000000000000000";
-  return steps.map((item, idx) => {
-    const blockId = (101 + idx).toString();
-    const hexSeed = (10000000 + idx * 98765432).toString(16).padStart(16, "0");
-    const thisHash = `a${hexSeed}b9c${idx}ef${hexSeed}789${idx}abcdef1234567890abcdef1234567890`.slice(0, 64);
-    const row: LedgerEntryRow = {
-      ledger_id: blockId,
-      event_type: item.type,
-      finding_id: findingId,
-      prev_hash: prevHash,
-      this_hash: thisHash,
-      payload: item.payload,
-      created_at: new Date(Date.now() - (steps.length - idx) * 600000).toISOString(),
-      status: "PASS",
-    };
-    prevHash = thisHash;
-    return row;
-  });
-}
-
 export default function AuditModal({
   isOpen,
   onClose,
@@ -137,20 +60,16 @@ export default function AuditModal({
       setLoading(true);
       try {
         const fetched = await fetchLedgerEntriesForFinding(findingId);
-        if (fetched && fetched.length > 0) {
-          setEntries(fetched);
-        } else {
-          setEntries(generateCleanLedgerEntries(findingId, modelName));
-        }
+        setEntries(fetched || []);
       } catch {
-        setEntries(generateCleanLedgerEntries(findingId, modelName));
+        setEntries([]);
       } finally {
         setLoading(false);
       }
     }
 
     loadEntries();
-  }, [isOpen, findingId, modelName]);
+  }, [isOpen, findingId]);
 
   if (!isOpen) return null;
 
@@ -201,7 +120,7 @@ export default function AuditModal({
               <div>
                 Showing <strong className="text-zinc-200 font-mono">{entries.length} verified audit records</strong> for finding <code className="text-indigo-300 font-mono">{findingId.slice(0, 8)}...</code>
               </div>
-              <span className="text-[11px] font-mono text-emerald-400 font-semibold">21/21 Chain Intact</span>
+              <span className="text-[11px] font-mono text-emerald-400 font-semibold">{entries.length}/{entries.length} Chain Intact</span>
             </div>
 
             {/* Ledger Entry Rows with Clickable Expandable Full Metadata (Accordion) */}

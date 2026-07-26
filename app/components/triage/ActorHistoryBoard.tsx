@@ -45,138 +45,6 @@ interface ActorHistoryBoardProps {
   actorName: string;
 }
 
-// Empirical mock offline datasets matching J. Alvarez and R. Chen seed stories
-const MOCK_ACTOR_DATASETS: Record<string, ActorHistoryResponse> = {
-  "J. Alvarez": {
-    actor: "J. Alvarez",
-    total_events: 2,
-    events_with_incidents: 2,
-    pattern_summary: {
-      pattern_type: "departing_engineer_change",
-      times_observed: 2,
-      times_preceded_incident: 2,
-      incident_rate_pct: 100.0,
-      avg_detection_lag_days: 54.0,
-    },
-    events: [
-      {
-        event_id: "c3c4d5e6-f7a8-9012-bcde-f34567890123",
-        model_id: "urn:li:dataset:(urn:li:dataPlatform:dbt,b2fd91.order_entry_db.order_entry.addresses,PROD)",
-        model_name: "addresses",
-        node_type: "pipeline_step",
-        event_type: "modified",
-        event_timestamp: "2026-04-10T09:00:00Z",
-        actor_departed_within_90d: true,
-        documentation_present: false,
-        linked_incident: {
-          incident_id: "d4e5f6a7-b8c9-0123-def0-567890123456",
-          incident_model_id: "urn:li:dataset:(urn:li:dataPlatform:dbt,b2fd91.order_entry_db.order_entry.order_items,PROD)",
-          incident_model_name: "order_items",
-          detected_at: "2026-06-15T11:00:00Z",
-          description: "Order item sync failure on order_items dataset due to unreviewed transformation logic in upstream addresses dataset.",
-          detection_lag_days: 66.1,
-        },
-      },
-      {
-        event_id: "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
-        model_id: "urn:li:dataset:(urn:li:dataPlatform:dbt,b2fd91.order_entry_db.order_entry.customers,PROD)",
-        model_name: "customers",
-        node_type: "threshold",
-        event_type: "modified",
-        event_timestamp: "2026-05-20T10:00:00Z",
-        actor_departed_within_90d: true,
-        documentation_present: false,
-        linked_incident: {
-          incident_id: "c3d4e5f6-a7b8-9012-cdef-345678901234",
-          incident_model_id: "urn:li:dataset:(urn:li:dataPlatform:dbt,b2fd91.ORDER_ENTRY_DB.analytics.order_details,PROD)",
-          incident_model_name: "order_details",
-          detected_at: "2026-07-08T14:30:00Z",
-          description: "Customer records miscategorized in order_details table due to unreviewed threshold change in upstream customers dataset.",
-          detection_lag_days: 49.2,
-        },
-      },
-    ],
-  },
-  "R. Chen": {
-    actor: "R. Chen",
-    total_events: 1,
-    events_with_incidents: 0,
-    pattern_summary: {
-      pattern_type: "unreviewed_change",
-      times_observed: 1,
-      times_preceded_incident: 0,
-      incident_rate_pct: 0.0,
-      avg_detection_lag_days: 0.0,
-    },
-    events: [
-      {
-        event_id: "b2c3d4e5-f6a7-8901-bcde-f23456789012",
-        model_id: "urn:li:dataset:(urn:li:dataPlatform:dbt,b2fd91.order_entry_db.order_entry.products,PROD)",
-        model_name: "products",
-        node_type: "feature",
-        event_type: "added",
-        event_timestamp: "2026-06-01T11:15:00Z",
-        actor_departed_within_90d: false,
-        documentation_present: false,
-        linked_incident: null,
-      },
-    ],
-  },
-};
-
-function buildDynamicActorDataset(targetActor: string): ActorHistoryResponse {
-  const cleanName = targetActor.replace(/\s*\(Departed.*?\)/i, "").trim();
-  if (MOCK_ACTOR_DATASETS[cleanName]) {
-    return MOCK_ACTOR_DATASETS[cleanName];
-  }
-
-  const isDeparted = cleanName.toLowerCase().includes("alvarez") || targetActor.toLowerCase().includes("departed");
-
-  return {
-    actor: cleanName || targetActor,
-    total_events: 2,
-    events_with_incidents: 1,
-    pattern_summary: {
-      pattern_type: isDeparted ? "departing_engineer_change" : "unreviewed_change",
-      times_observed: 2,
-      times_preceded_incident: 1,
-      incident_rate_pct: 50.0,
-      avg_detection_lag_days: 14.0,
-    },
-    events: [
-      {
-        event_id: `evt-${cleanName.replace(/\s+/g, "-").toLowerCase()}-1`,
-        model_id: "urn:li:dataset:(urn:li:dataPlatform:dbt,b2fd91.order_entry_db.order_entry.customers,PROD)",
-        model_name: "customers",
-        node_type: "threshold",
-        event_type: "modified",
-        event_timestamp: "2026-05-20T10:00:00Z",
-        actor_departed_within_90d: isDeparted,
-        documentation_present: false,
-        linked_incident: {
-          incident_id: "inc-104",
-          incident_model_id: "urn:li:dataset:(urn:li:dataPlatform:dbt,b2fd91.ORDER_ENTRY_DB.analytics.order_details,PROD)",
-          incident_model_name: "order_details",
-          detected_at: "2026-06-03T10:00:00Z",
-          description: `Downstream categorization anomaly correlated with threshold edit authored by ${cleanName}.`,
-          detection_lag_days: 14.0,
-        },
-      },
-      {
-        event_id: `evt-${cleanName.replace(/\s+/g, "-").toLowerCase()}-2`,
-        model_id: "urn:li:dataset:(urn:li:dataPlatform:dbt,b2fd91.order_entry_db.order_entry.products,PROD)",
-        model_name: "products",
-        node_type: "feature",
-        event_type: "added",
-        event_timestamp: "2026-06-01T11:15:00Z",
-        actor_departed_within_90d: false,
-        documentation_present: true,
-        linked_incident: null,
-      },
-    ],
-  };
-}
-
 export default function ActorHistoryBoard({ actorName }: ActorHistoryBoardProps) {
   const [data, setData] = useState<ActorHistoryResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
@@ -185,15 +53,9 @@ export default function ActorHistoryBoard({ actorName }: ActorHistoryBoardProps)
     setLoading(true);
     try {
       const result = await fetchActorHistoryData(actorName);
-      if (result) {
-        setData(result);
-      } else {
-        const fallback = buildDynamicActorDataset(actorName);
-        setData(fallback);
-      }
+      setData(result);
     } catch {
-      const fallback = buildDynamicActorDataset(actorName);
-      setData(fallback);
+      setData(null);
     } finally {
       setLoading(false);
     }
