@@ -5,12 +5,14 @@ import DashboardShell from "@/components/dashboard/DashboardShell";
 import AuditModal from "@/components/triage/AuditModal";
 import Link from "next/link";
 import { fetchFindingDetail, verifyLedgerChain, triggerWriteback } from "@/lib/api";
+import { useAuth } from "@/lib/useAuth";
 
 interface FindingDetailProps {
   params: Promise<{ id: string }>;
 }
 
 export default function FindingDetailPage({ params }: FindingDetailProps) {
+  const { user, isLoading: authLoading } = useAuth(true); // redirect to /connect if not logged in
   const resolvedParams = use(params);
   const findingId = resolvedParams.id;
 
@@ -24,6 +26,17 @@ export default function FindingDetailPage({ params }: FindingDetailProps) {
   const [verifyingLedger, setVerifyingLedger] = useState<boolean>(false);
   const [ledgerVerified, setLedgerVerified] = useState<boolean>(false);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState<boolean>(false);
+
+  // Auth guard — render spinner while checking auth, redirect handled by useAuth
+  if (authLoading || !user) {
+    return (
+      <div className="min-h-screen bg-[#09090b] flex items-center justify-center">
+        <span className="w-6 h-6 rounded-full border-2 border-[#9B7FF6] border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
+
 
   useEffect(() => {
     async function loadFinding() {

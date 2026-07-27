@@ -9,8 +9,14 @@ import RiskTriageList from "@/components/RiskTriageList";
 import LedgerVerification from "@/components/LedgerVerification";
 import FAQ from "@/components/FAQ";
 import Footer from "@/components/Footer";
+import { useAuth } from "@/lib/useAuth";
+
 
 export default function Home() {
+  const { user, isLoading } = useAuth(); // don't redirect — this is the public landing page
+  // Determine where "Get Started" should take the user
+  const getStartedHref = !isLoading && user ? "/triage" : "/connect";
+
   return (
     <div className="relative min-h-screen bg-[#09090b] text-zinc-100 font-sans overflow-x-hidden selection:bg-[#9B7FF6] selection:text-white flex flex-col justify-between">
       {/* Shared Navigation Header */}
@@ -40,12 +46,17 @@ export default function Home() {
 
             {/* Realistic 3D Dark Glass Buttons */}
             <div className="pt-2 flex flex-wrap items-center gap-4">
-              {/* Primary 3D Dark Glass Button -> Redirects to /triage */}
+              {/* Primary 3D Dark Glass Button — routes to /triage if logged in, /connect if not */}
               <Link
-                href="/triage"
+                href={getStartedHref}
+                id="get-started-btn"
                 className="relative group inline-flex items-center gap-2.5 px-7 py-3.5 rounded-xl font-semibold text-sm text-white transition-all cursor-pointer select-none border border-white/15 bg-gradient-to-b from-zinc-800/90 via-zinc-900/90 to-zinc-950/95 backdrop-blur-xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2),_0_4px_20px_-2px_rgba(0,0,0,0.6),_0_0_15px_-3px_rgba(155,127,246,0.25)] hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.35),_0_6px_25px_-2px_rgba(0,0,0,0.8),_0_0_22px_-2px_rgba(155,127,246,0.4)] hover:border-white/25 active:translate-y-[1px] active:shadow-inner"
               >
-                <span>Get Started</span>
+                {isLoading ? (
+                  <span className="w-3.5 h-3.5 rounded-full border-2 border-[#9B7FF6] border-t-transparent animate-spin" />
+                ) : (
+                  <span>Get Started</span>
+                )}
                 <span className="group-hover:translate-x-0.5 transition-transform text-[#9B7FF6]">
                   &rarr;
                 </span>

@@ -5,6 +5,8 @@ import { useSearchParams } from "next/navigation";
 import DashboardShell from "@/components/dashboard/DashboardShell";
 import ActorHistoryBoard from "@/components/triage/ActorHistoryBoard";
 import { fetchRiskRankings } from "@/lib/api";
+import { useAuth } from "@/lib/useAuth";
+
 
 function ActorHistoryContent() {
   const searchParams = useSearchParams();
@@ -89,6 +91,16 @@ function ActorHistoryContent() {
 }
 
 export default function ActorHistoryPage() {
+  const { user, isLoading } = useAuth(true); // redirect to /connect if not logged in
+
+  if (isLoading || !user) {
+    return (
+      <div className="min-h-screen bg-[#09090b] flex items-center justify-center">
+        <span className="w-6 h-6 rounded-full border-2 border-[#9B7FF6] border-t-transparent animate-spin" />
+      </div>
+    );
+  }
+
   return (
     <DashboardShell activeBreadcrumb="/ actor">
       <Suspense fallback={<div className="p-8 text-center text-xs font-mono text-zinc-500">Loading actor lineage history...</div>}>
