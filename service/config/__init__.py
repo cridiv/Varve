@@ -26,5 +26,8 @@ __all__ = [
     "DATAHUB_GMS_URL",
     "DATAHUB_GMS_TOKEN",
     "POSTGRES_DSN",
+    "SLACK_BOT_TOKEN",
+    "SLACK_WEBHOOK_URL",
+    "FRONTEND_BASE_URL",
     "validate_config",
 ]

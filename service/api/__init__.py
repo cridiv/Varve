@@ -8,6 +8,7 @@ from .patterns import router as patterns_router
 from .ledger import router as ledger_router
 from .validation import router as validation_router
 from .candidates import router as candidates_router
+from .alerts import alerts_router
 
 __all__ = [
     "health_router",
@@ -16,4 +17,5 @@ __all__ = [
     "ledger_router",
     "validation_router",
     "candidates_router",
+    "alerts_router",
 ]

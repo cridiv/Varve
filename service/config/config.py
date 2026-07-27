@@ -38,6 +38,10 @@ MODEL_API_KEY = os.environ.get("MODEL_API_KEY")
 DATAHUB_GMS_URL = os.environ.get("DATAHUB_GMS_URL") or "http://localhost:8080"
 DATAHUB_GMS_TOKEN = os.environ.get("DATAHUB_GMS_TOKEN") or None  # optional for local quickstart
 
+# --- Slack connection ---
+SLACK_BOT_TOKEN = os.environ.get("SLACK_BOT_TOKEN") or None  # optional for local quickstart
+SLACK_WEBHOOK_URL = os.environ.get("SLACK_WEBHOOK_URL") or None  # optional for local quickstart
+
 # --- Frontend Base URL ---
 FRONTEND_BASE_URL = os.environ.get("FRONTEND_BASE_URL") or "http://localhost:3000"
 
@@ -72,3 +76,4 @@ def validate_config() -> None:
     print(f"[config] DataHub GMS: {DATAHUB_GMS_URL}")
     print(f"[config] Frontend:    {FRONTEND_BASE_URL}")
     print(f"[config] Postgres:    {POSTGRES_DSN}")
+    

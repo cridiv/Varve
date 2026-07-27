@@ -18,7 +18,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config.config import validate_config
-from api import health_router, findings_router, patterns_router, ledger_router, validation_router, candidates_router
+from api import health_router, findings_router, patterns_router, ledger_router, validation_router, candidates_router, alerts_router
 from services.validation_service import generate_validation_report
 
 app = FastAPI(title="Varve AI API", version="0.2.0")
@@ -39,6 +39,7 @@ app.include_router(patterns_router)
 app.include_router(ledger_router)
 app.include_router(validation_router)
 app.include_router(candidates_router)
+app.include_router(alerts_router)
 
 
 @app.on_event("startup")
