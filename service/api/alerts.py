@@ -48,20 +48,22 @@ def alert_finding(finding_id: str, body: AlertRequest = AlertRequest()):
             """
             SELECT
                 f.finding_id,
-                f.model_id      AS model_name,
+                f.model_id,
                 f.severity,
                 f.narrative,
                 f.recommended_action,
                 f.evidence_scope,
                 f.routed_to_team,
-                ROUND(
-                    EXTRACT(EPOCH FROM (
-                        COALESCE(i.incident_date, NOW()) - f.event_timestamp
-                    )) / 86400
-                )::INT           AS detection_lag_days
+                COALESCE(
+                    ROUND(EXTRACT(EPOCH FROM (i.detected_at - e.event_timestamp)) / 86400.0, 1)::FLOAT,
+                    p.avg_detection_lag_days::FLOAT
+                ) AS avg_detection_lag_days
             FROM findings f
-            LEFT JOIN incidents i ON i.root_cause_event_id = f.event_id::TEXT
+            JOIN lineage_events e ON f.related_event_id = e.event_id
+            LEFT JOIN incidents i ON i.root_cause_event_id = f.related_event_id
+            LEFT JOIN patterns p ON p.scope_key = f.model_id
             WHERE f.finding_id = %s
+            ORDER BY i.created_at ASC
             LIMIT 1
             """,
             (finding_id,),
@@ -77,8 +79,8 @@ def alert_finding(finding_id: str, body: AlertRequest = AlertRequest()):
         raise HTTPException(status_code=404, detail=f"Finding {finding_id} not found")
 
     cols = [
-        "finding_id", "model_name", "severity", "narrative",
-        "recommended_action", "evidence_scope", "routed_to_team", "detection_lag_days"
+        "finding_id", "model_id", "severity", "narrative",
+        "recommended_action", "evidence_scope", "routed_to_team", "avg_detection_lag_days"
     ]
     finding = dict(zip(cols, row))
     finding["slack_channel"] = body.slack_channel

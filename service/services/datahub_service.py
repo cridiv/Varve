@@ -185,7 +185,7 @@ def resolve_dataset_governance_multiplier(dataset_urn: str) -> Dict[str, Any]:
     }
 
 
-def writeback_finding_to_datahub(finding_id: str) -> Dict[str, Any]:
+def writeback_finding_to_datahub(finding_id: str, force: bool = False) -> Dict[str, Any]:
     """
     Step 9.1: Emits a DataHub MetadataChangeProposal carrying an InstitutionalMemory
     aspect documentation annotation onto the specified lineage node dataset URN.
@@ -220,6 +220,35 @@ def writeback_finding_to_datahub(finding_id: str) -> Dict[str, Any]:
         f"⚠️ Varve Risk Finding [{finding['severity'].upper()}]: {finding['narrative']} "
         f"Recommended Action: {finding['recommended_action']}"
     )
+
+    # Idempotency Guard: Check if a writeback event for this finding already exists in the ledger or findings table
+    existing_ledger_entry = None
+    try:
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT ledger_id, this_hash, created_at
+                    FROM ledger
+                    WHERE finding_id = %s AND event_type = 'writeback'
+                    ORDER BY created_at ASC
+                    LIMIT 1;
+                """, (finding_id,))
+                existing_ledger_entry = cur.fetchone()
+    except Exception as e:
+        print(f"[warning] Ledger idempotency check failed: {e}")
+
+    if existing_ledger_entry and not force:
+        print(f"[idempotent] Finding '{finding_id}' writeback already recorded in ledger (ledger_id={existing_ledger_entry['ledger_id']}). Skipping duplicate emission & hash chain append.")
+        return {
+            "finding_id": finding_id,
+            "dataset_urn": dataset_urn,
+            "annotation_text": annotation_text,
+            "link_url": finding_link_url,
+            "status": "already_written_back",
+            "already_written_back": True,
+            "ledger_id": str(existing_ledger_entry["ledger_id"]),
+            "this_hash": existing_ledger_entry["this_hash"],
+        }
 
     current_time_ms = int(time.time() * 1000)
     audit_stamp = AuditStampClass(
@@ -278,34 +307,17 @@ def writeback_finding_to_datahub(finding_id: str) -> Dict[str, Any]:
 
     print(f"✅ Write-back successful! Updated written_back_at timestamp in database.")
 
-    # B2.2 Ledger event: writeback (throttles rapid duplicate clicks within 10 seconds)
-    recent_writeback = False
-    try:
-        with get_db_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute("""
-                    SELECT COUNT(*) as cnt FROM ledger 
-                    WHERE finding_id = %s AND event_type = 'writeback'
-                      AND created_at > (NOW() - INTERVAL '10 seconds');
-                """, (finding_id,))
-                row = cur.fetchone()
-                if row and row.get("cnt", 0) > 0:
-                    recent_writeback = True
-    except Exception as e:
-        print(f"[warning] Check writeback ledger throttle fallback: {e}")
-
-    if not recent_writeback:
-        append_to_ledger(
-            event_type="writeback",
-            finding_id=finding_id,
-            payload={
-                "model_id": finding["model_id"],
-                "dataset_urn": dataset_urn,
-                "annotation_text": annotation_text,
-                "link_url": finding_link_url,
-                "status": "written_back",
-            }
-        )
+    ledger_rec = append_to_ledger(
+        event_type="writeback",
+        finding_id=finding_id,
+        payload={
+            "model_id": finding["model_id"],
+            "dataset_urn": dataset_urn,
+            "annotation_text": annotation_text,
+            "link_url": finding_link_url,
+            "status": "written_back",
+        }
+    )
 
     return {
         "finding_id": finding_id,
@@ -313,6 +325,9 @@ def writeback_finding_to_datahub(finding_id: str) -> Dict[str, Any]:
         "annotation_text": annotation_text,
         "link_url": finding_link_url,
         "status": "written_back",
+        "already_written_back": False,
+        "ledger_id": str(ledger_rec.get("ledger_id")) if ledger_rec else None,
+        "this_hash": ledger_rec.get("this_hash") if ledger_rec else None,
     }
 
 

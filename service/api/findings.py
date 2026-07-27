@@ -282,17 +282,23 @@ def get_finding_detail(finding_id: str):
 
 
 @router.post("/findings/{finding_id}/writeback")
-def trigger_writeback(finding_id: str):
+def trigger_writeback(finding_id: str, force: bool = False):
     """
     Triggers DataHub metadata write-back for the specified finding.
     Annotates the lineage dataset node on DataHub GMS and updates database.
+    Idempotent by default: skips duplicate emissions and ledger appends if already written back.
     """
     try:
-        res = writeback_finding_to_datahub(finding_id)
+        res = writeback_finding_to_datahub(finding_id, force=force)
         confirm_datahub_annotation(res["dataset_urn"])
+        msg = (
+            "Finding metadata already written back to DataHub (idempotent skip)"
+            if res.get("already_written_back")
+            else "Finding metadata successfully written back to DataHub"
+        )
         return {
             "status": "success",
-            "message": "Finding metadata successfully written back to DataHub",
+            "message": msg,
             "details": res,
         }
     except Exception as e:
