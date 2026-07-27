@@ -24,6 +24,9 @@ export default function Home() {
 
       {/* Hero Section */}
       <main className="relative w-full max-w-7xl mx-auto px-6 py-12 lg:py-20 my-auto">
+        {/* Ambient Backlight Behind 3D Scene */}
+        <div className="absolute top-1/2 -translate-y-1/2 right-[5%] w-[450px] h-[450px] bg-[#9B7FF6]/12 blur-[100px] rounded-full pointer-events-none z-0" />
+
         <div className="relative z-10 grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-8 items-center">
           {/* Left Column: Simple Clean Hero Content */}
           <div className="flex flex-col items-start text-left space-y-6">
