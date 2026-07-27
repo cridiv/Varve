@@ -21,16 +21,16 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   metadataBase: new URL(process.env.NEXT_PUBLIC_FRONTEND_URL || "https://datavarve.xyz"),
-  title: "Varve — AI Risk & Decision Intelligence Platform",
+  title: "Varve - AI Risk & Decision Intelligence Platform",
   description:
-    "Catch silent, undocumented ML pipeline debt before it becomes an incident — ranked by empirical precedent, honestly labeled by evidence tier, and ledgered.",
+    "Catch silent, undocumented ML pipeline debt before it becomes an incident, ranked by empirical precedent, honestly labeled by evidence tier, and ledgered.",
   icons: {
     icon: "/varve_logo.png",
     shortcut: "/varve_logo.png",
     apple: "/varve_logo.png",
   },
   openGraph: {
-    title: "Varve — AI Risk & Decision Intelligence Platform",
+    title: "Varve - AI Risk & Decision Intelligence Platform",
     description:
       "Catch silent, undocumented ML pipeline debt before it becomes an incident — ranked by empirical precedent, honestly labeled by evidence tier, and ledgered.",
     siteName: "Varve",
