@@ -20,7 +20,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_FRONTEND_URL || "http://localhost:3000"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_FRONTEND_URL || "https://datavarve.xyz"),
   title: "Varve — AI Risk & Decision Intelligence Platform",
   description:
     "Catch silent, undocumented ML pipeline debt before it becomes an incident — ranked by empirical precedent, honestly labeled by evidence tier, and ledgered.",
