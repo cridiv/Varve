@@ -27,18 +27,11 @@ export default function FindingDetailPage({ params }: FindingDetailProps) {
   const [ledgerVerified, setLedgerVerified] = useState<boolean>(false);
   const [isAuditModalOpen, setIsAuditModalOpen] = useState<boolean>(false);
 
-  // Auth guard — render spinner while checking auth, redirect handled by useAuth
-  if (authLoading || !user) {
-    return (
-      <div className="min-h-screen bg-[#09090b] flex items-center justify-center">
-        <span className="w-6 h-6 rounded-full border-2 border-[#9B7FF6] border-t-transparent animate-spin" />
-      </div>
-    );
-  }
-
-
-
+  // All hooks must be declared unconditionally before any early return (Rules of Hooks)
   useEffect(() => {
+    // Skip data fetch while auth is still resolving
+    if (authLoading || !user) return;
+
     async function loadFinding() {
       setLoading(true);
       setResolutionStep("checking");
@@ -54,7 +47,7 @@ export default function FindingDetailPage({ params }: FindingDetailProps) {
     }
 
     loadFinding();
-  }, [findingId]);
+  }, [findingId, authLoading, user]);
 
   // Live Severity Beat Sequence (Part B §2.2) with natural variable timing
   useEffect(() => {
@@ -83,6 +76,15 @@ export default function FindingDetailPage({ params }: FindingDetailProps) {
 
     return () => clearTimeout(t1);
   }, [finding, findingId]);
+
+  // Auth guard — render spinner while checking auth, redirect handled by useAuth
+  if (authLoading || !user) {
+    return (
+      <div className="min-h-screen bg-[#09090b] flex items-center justify-center">
+        <span className="w-6 h-6 rounded-full border-2 border-[#9B7FF6] border-t-transparent animate-spin" />
+      </div>
+    );
+  }
 
   // Genuine Ledger Verification Trigger (Part B §2.6)
   const handleVerifyAuditTrail = async () => {

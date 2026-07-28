@@ -93,24 +93,25 @@ def build_slack_payload(finding: dict, finding_url: str) -> dict:
     recommended_action = finding.get("recommended_action", "").strip()
 
     return {
-        # Fallback text shown in notifications / accessibility clients
-        "text": f"{emoji} {severity.upper()} risk confirmed on *{model_name}* — review immediately.",
+        # Fallback text shown in notifications / accessibility clients — no emoji here,
+        # Slack renders the header emoji separately and correctly in the message body.
+        "text": f"[Varve AI] {severity.upper()} risk confirmed on {model_name} — review immediately.",
         "blocks": [
             {
                 "type": "header",
                 "text": {
                     "type": "plain_text",
-                    "text": f"{emoji} {severity.upper()} risk confirmed — {model_name}",
-                    "emoji": True,
+                    "text": f"Varve Risk Alert — {model_name.upper()} ({severity.upper()})",
+                    "emoji": False,
                 },
             },
             {
                 "type": "section",
                 "fields": [
+                    {"type": "mrkdwn", "text": f"*Severity*\n{emoji} {severity.upper()}"},
                     {"type": "mrkdwn", "text": f"*Evidence*\n{scope_label}"},
-                    {"type": "mrkdwn", "text": f"*Avg. detection lag*\n{lag_text}"},
-                    {"type": "mrkdwn", "text": f"*Routed to*\n{owner}"},
-                    {"type": "mrkdwn", "text": f"*Status*\nJust confirmed by review"},
+                    {"type": "mrkdwn", "text": f"*Avg. Detection Lag*\n{lag_text}"},
+                    {"type": "mrkdwn", "text": f"*Routed To*\n{owner}"},
                 ],
             },
             {"type": "divider"},
@@ -136,7 +137,7 @@ def build_slack_payload(finding: dict, finding_url: str) -> dict:
                         "text": {
                             "type": "plain_text",
                             "text": "View finding on Varve →",
-                            "emoji": True,
+                            "emoji": False,
                         },
                         "url": finding_url,
                         "style": "danger" if severity == "high" else "primary",
