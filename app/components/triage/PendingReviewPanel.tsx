@@ -37,9 +37,10 @@ export interface CandidateIncident {
 
 interface PendingReviewPanelProps {
   onCandidateActionSuccess?: () => void;
+  refreshKey?: number;
 }
 
-export default function PendingReviewPanel({ onCandidateActionSuccess }: PendingReviewPanelProps) {
+export default function PendingReviewPanel({ onCandidateActionSuccess, refreshKey }: PendingReviewPanelProps) {
   const [candidates, setCandidates] = useState<CandidateIncident[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
@@ -59,7 +60,7 @@ export default function PendingReviewPanel({ onCandidateActionSuccess }: Pending
 
   useEffect(() => {
     fetchCandidates();
-  }, [fetchCandidates]);
+  }, [fetchCandidates, refreshKey]);
 
   const handleAction = async (candidate_id: string, action: "confirm" | "dismiss") => {
     setProcessingId(candidate_id);

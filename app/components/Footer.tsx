@@ -23,27 +23,27 @@ export default function Footer() {
                 alt="Varve Logo"
                 width={105}
                 height={26}
-                className="h-6 w-auto object-contain transition-opacity group-hover:opacity-90"
+                className="h-7 w-auto object-contain transition-opacity group-hover:opacity-90"
               />
             </Link>
-            <p className="text-xs sm:text-sm text-zinc-400 leading-relaxed max-w-sm font-normal">
+            <p className="text-sm font-sans text-zinc-400 leading-relaxed max-w-sm font-normal">
               ML Lineage Archaeology — composition of DataHub primitives to prove where your next production outage will originate.
             </p>
           </div>
 
           {/* Column 2: Navigation Links (3 cols) */}
           <div className="md:col-span-3 space-y-3">
-            <div className="text-xs font-semibold uppercase tracking-wider text-zinc-300">
+            <div className="text-xs font-sans font-bold uppercase tracking-wider text-zinc-300">
               Platform
             </div>
-            <ul className="space-y-2 text-xs text-zinc-400 font-medium">
+            <ul className="space-y-2 text-sm font-sans text-zinc-400 font-medium">
               <li>
                 <Link href="#features" className="hover:text-white transition-colors cursor-pointer">
                   Archaeology Pipeline
                 </Link>
               </li>
               <li>
-                <Link href="#triage" className="hover:text-white transition-colors cursor-pointer">
+                <Link href="/triage" className="hover:text-white transition-colors cursor-pointer">
                   Live Risk Triage
                 </Link>
               </li>
@@ -60,31 +60,31 @@ export default function Footer() {
             </ul>
           </div>
 
-          {/* Column 3: DataHub Ecosystem & Tech (4 cols) */}
+          {/* Column 3: DataHub Intelligence Engine (4 cols) */}
           <div className="md:col-span-4 space-y-3">
-            <div className="text-xs font-semibold uppercase tracking-wider text-zinc-300">
-              Architecture &amp; Engine
+            <div className="text-xs font-sans font-bold uppercase tracking-wider text-zinc-300">
+              DataHub Context Engine
             </div>
-            <p className="text-xs text-zinc-400 leading-relaxed">
-              Built natively for <strong className="text-zinc-200">DataHub metadata graphs</strong>. 3D WebGL engine rendered with <strong className="text-zinc-200">Three.js</strong> and <strong className="text-zinc-200">GSAP</strong>.
+            <p className="text-sm font-sans text-zinc-400 leading-relaxed">
+              Powered by DataHub's <strong className="text-zinc-200 font-semibold">Agent Context Kit</strong> &amp; <strong className="text-zinc-200 font-semibold">MCP Server</strong> to intercept silent upstream risk across multi-platform ML pipelines.
             </p>
-            <div className="pt-2 flex items-center gap-3 text-[11px] text-zinc-500 font-mono">
-              <span className="w-2 h-2 rounded-full bg-emerald-500" />
-              <span>All Systems Operational</span>
+            <div className="pt-2 flex items-center gap-3 text-xs text-zinc-400 font-mono">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>DataHub Graph Active</span>
             </div>
           </div>
         </div>
 
-        {/* Bottom Skeuomorphic Separator Line */}
-        <div className="mt-12 pt-6 border-t border-white/10 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.05)] flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-zinc-500">
+        {/* Bottom Footer Credits & Links */}
+        <div className="mt-24 mb-8 pt-10 flex flex-col sm:flex-row items-center justify-between gap-6 text-xs sm:text-sm text-zinc-400 font-mono border-t border-white/5">
           <div>
             &copy; {new Date().getFullYear()} Varve Inc. All rights reserved.
           </div>
 
           <div className="flex items-center gap-6">
-            <span className="hover:text-zinc-400 transition-colors cursor-pointer">Privacy</span>
-            <span className="hover:text-zinc-400 transition-colors cursor-pointer">Terms</span>
-            <span className="hover:text-zinc-400 transition-colors cursor-pointer">Security</span>
+            <span className="hover:text-white transition-colors cursor-pointer">Privacy</span>
+            <span className="hover:text-white transition-colors cursor-pointer">Terms</span>
+            <span className="hover:text-white transition-colors cursor-pointer">Security</span>
           </div>
         </div>
       </div>

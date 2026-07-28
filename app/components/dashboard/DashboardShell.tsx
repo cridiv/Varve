@@ -3,7 +3,7 @@
 import React, { ReactNode, useState, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { verifyLedgerChain } from "@/lib/api";
 
 interface DashboardShellProps {
@@ -85,13 +85,16 @@ export default function DashboardShell({
     return () => clearInterval(timer);
   }, [lastSyncedAt]);
 
+  const router = useRouter();
+
   const handleManualRefreshClick = () => {
     if (onRefresh) {
       onRefresh();
-      setLastSyncedAt(new Date());
-      setShowRefreshToast(true);
-      setTimeout(() => setShowRefreshToast(false), 3000);
     }
+    router.refresh();
+    setLastSyncedAt(new Date());
+    setShowRefreshToast(true);
+    setTimeout(() => setShowRefreshToast(false), 3000);
   };
 
   return (

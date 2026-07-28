@@ -15,6 +15,7 @@ interface TriageDashboardProps {
 export default function TriageDashboard({ onRefreshTrigger }: TriageDashboardProps) {
   const [findings, setFindings] = useState<Finding[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [refreshKey, setRefreshKey] = useState<number>(0);
 
   // Fetch from GET /models/risk-ranking via unified API client (Part B §1)
   const loadRankings = useCallback(async () => {
@@ -22,6 +23,7 @@ export default function TriageDashboard({ onRefreshTrigger }: TriageDashboardPro
     try {
       const data = await fetchRiskRankings();
       setFindings(data);
+      setRefreshKey((prev) => prev + 1);
     } catch (err) {
       console.warn("Error fetching risk rankings:", err);
     } finally {
@@ -148,7 +150,7 @@ export default function TriageDashboard({ onRefreshTrigger }: TriageDashboardPro
       <SummaryStatRow findings={findings} />
 
       {/* 0.5 — Pending Review Panel (Candidate Incident Loop) */}
-      <PendingReviewPanel onCandidateActionSuccess={loadRankings} />
+      <PendingReviewPanel onCandidateActionSuccess={loadRankings} refreshKey={refreshKey} />
 
       {/* Main Content Area */}
       {isLoading ? (
