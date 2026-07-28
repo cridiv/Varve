@@ -153,7 +153,7 @@ export default function PendingReviewPanel({ onCandidateActionSuccess }: Pending
                       {getModelDisplayName(cand.model_id)}
                     </span>
                     <span className="text-[10px] font-mono text-amber-300 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800/60">
-                      {cand.anomaly_metric}: {cand.anomaly_value}
+                      {cand.anomaly_metric}: ${Number(cand.anomaly_value).toLocaleString("en-US", { maximumFractionDigits: 0 })}
                     </span>
                     <span className="text-[10px] text-zinc-400 font-mono bg-zinc-900 px-1.5 py-0.5 rounded">
                       {cand.created_at ? getRelativeTimeString(cand.created_at) : "4m ago"}
@@ -165,7 +165,7 @@ export default function PendingReviewPanel({ onCandidateActionSuccess }: Pending
                     )}
                   </div>
 
-                  <p className="text-xs text-zinc-400 leading-snug truncate">
+                  <p className="text-xs text-zinc-400 leading-snug">
                     {cand.proposed_description}
                   </p>
                 </div>

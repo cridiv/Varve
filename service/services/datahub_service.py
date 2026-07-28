@@ -184,10 +184,162 @@ def resolve_dataset_routed_owner(dataset_urn: str) -> str:
     return resolve_dataset_routed_owner_info(dataset_urn)["routed_to_team"]
 
 
+def resolve_dataset_financial_baseline(dataset_urn: str) -> Dict[str, Any]:
+    """
+    Resolves dataset's monthly financial baseline volume across 3 sources:
+    1. Source 1 (datahub_native): DataHub structuredProperties/customProperties.
+    2. Source 2 (postgres_baseline): 90-day empirical median across non-anomalous business_metrics points.
+    3. Source 3 (industry_default): 4-tier heuristic model classification with explicit fallback.
+    
+    Performs sanity ceiling and source discrepancy checks.
+    """
+    entity_name = dataset_urn.split(".")[-1].replace(",PROD)", "").lower()
+    
+    # ── Source 3: Heuristic 4-Tier Default Heuristic ─────────────────────────
+    core_analytics_kw = ["customer", "order", "revenue", "transaction", "checkout", "billing", "user"]
+    dimension_kw = ["product", "address", "inventory", "item", "catalog"]
+    lookup_kw = ["country", "region", "currency", "reference", "code", "zip"]
+    
+    if any(kw in entity_name for kw in core_analytics_kw):
+        tier_name = "core_analytics"
+        default_baseline = 100000.0
+    elif any(kw in entity_name for kw in dimension_kw):
+        tier_name = "dimension"
+        default_baseline = 25000.0
+    elif any(kw in entity_name for kw in lookup_kw):
+        tier_name = "lookup"
+        default_baseline = 5000.0
+    else:
+        tier_name = "unclassified"
+        default_baseline = 10000.0
+        
+    baseline_mrr = default_baseline
+    baseline_source = "industry_default"
+    discrepancy_warning = None
+    sanity_warning = None
+    
+    # ── Source 2: Empirical Postgres Median (90-day window, non-anomalous) ────
+    emp_median = None
+    try:
+        from db.connection import get_db_connection
+        with get_db_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY value) AS median_val
+                    FROM business_metrics
+                    WHERE (model_id = %s OR LOWER(model_id) LIKE %s)
+                      AND is_anomaly = FALSE
+                      AND recorded_at >= NOW() - INTERVAL '90 days';
+                    """,
+                    (dataset_urn, f"%{entity_name}%")
+                )
+                row = cur.fetchone()
+                if row and row["median_val"] is not None:
+                    emp_median = float(row["median_val"])
+    except Exception as e:
+        print(f"[warning] Empirical median calculation error for {dataset_urn}: {e}")
+
+    # ── Source 1: DataHub Native Properties (Aspect & Custom Properties) ─────
+    datahub_prop_val = None
+    try:
+        graph = get_datahub_graph()
+        from datahub.metadata.schema_classes import DatasetPropertiesClass
+        dataset_props = graph.get_aspect(dataset_urn, DatasetPropertiesClass)
+        if dataset_props and dataset_props.customProperties:
+            cp = dataset_props.customProperties
+            dh_val = cp.get("monthly_financial_volume") or cp.get("monthly_arr") or cp.get("revenue_scope")
+            if dh_val:
+                datahub_prop_val = float(dh_val)
+
+        if datahub_prop_val is None:
+            lineage_ctx = get_lineage_via_agent_context(dataset_urn, max_hops=1)
+            props = lineage_ctx.get("structured_properties", {})
+            dh_val = props.get("monthly_arr_usd") or props.get("monthly_financial_volume")
+            if dh_val:
+                datahub_prop_val = float(dh_val)
+    except Exception as e:
+        print(f"[warning] DataHub property resolution error: {e}")
+
+    # ── Source 2: DataHub Derived Baseline (Additive Bounded Multipliers) ────
+    datahub_derived_val = None
+    derived_audit_note = None
+    try:
+        graph = get_datahub_graph()
+        from datahub.metadata.schema_classes import DatasetPropertiesClass, GlobalTagsClass
+        props_aspect = graph.get_aspect(dataset_urn, DatasetPropertiesClass)
+        tags_aspect = graph.get_aspect(dataset_urn, GlobalTagsClass)
+
+        mat_type = "table"
+        domain_name = ""
+        cp = props_aspect.customProperties if props_aspect and props_aspect.customProperties else {}
+        mat_type = cp.get("materialization", "table").lower()
+        domain_name = cp.get("domain", "").lower()
+
+        # Additive multiplier chain (bounded at 2.0x max)
+        base_val = 50000.0 if mat_type in ["table", "incremental"] else 10000.0
+        score_boost = 1.0
+
+        if cp.get("business_critical") == "True":
+            score_boost += 0.50
+        if cp.get("contains_pii") == "True":
+            score_boost += 0.25
+
+        known_core_domains = ["order entry", "analytics", "finance", "billing", "checkout"]
+        if domain_name and any(d in domain_name for d in known_core_domains):
+            score_boost += 0.25
+
+        # Bounded compound ceiling at 2.0x
+        final_boost = min(score_boost, 2.0)
+        datahub_derived_val = round(base_val * final_boost, 2)
+        derived_audit_note = (
+            f"Derived from DataHub catalog signals (materialization={mat_type}, "
+            f"domain='{domain_name or 'unmatched'}'; boost {final_boost:.2f}x capped)"
+        )
+    except Exception as e:
+        print(f"[warning] DataHub derived baseline error: {e}")
+
+    # ── Source Resolution & Discrepancy Evaluation ───────────────────────────
+    if datahub_prop_val is not None:
+        # Check Source 1 Sanity Ceiling (>10x Tier Default)
+        if datahub_prop_val > 10 * default_baseline:
+            sanity_warning = (
+                f"DataHub metadata asserts ${datahub_prop_val:,.0f}/mo, which exceeds "
+                f"10x of tier '{tier_name}' default (${default_baseline:,.0f}/mo)."
+            )
+            
+        if emp_median is not None and (datahub_prop_val / max(emp_median, 1.0) > 5.0 or emp_median / max(datahub_prop_val, 1.0) > 5.0):
+            discrepancy_warning = (
+                f"Baseline discrepancy: DataHub metadata asserts ${datahub_prop_val:,.0f}/mo, "
+                f"but 90-day empirical median is ${emp_median:,.0f}/mo. Using empirical median."
+            )
+            baseline_mrr = emp_median
+            baseline_source = "postgres_baseline"
+        else:
+            baseline_mrr = datahub_prop_val
+            baseline_source = "datahub_native"
+    elif datahub_derived_val is not None and datahub_derived_val > 0:
+        baseline_mrr = datahub_derived_val
+        baseline_source = "datahub_derived"
+        sanity_warning = derived_audit_note
+    elif emp_median is not None and emp_median > 0:
+        baseline_mrr = emp_median
+        baseline_source = "postgres_baseline"
+
+    return {
+        "baseline_mrr": round(baseline_mrr, 2),
+        "baseline_source": baseline_source,
+        "model_tier": tier_name,
+        "discrepancy_warning": discrepancy_warning,
+        "sanity_warning": sanity_warning,
+    }
+
+
 def resolve_dataset_governance_multiplier(dataset_urn: str) -> Dict[str, Any]:
     """
     E2.2 Maps DataHub governance tags (PII=1.3x, business-critical=1.5x) to a severity multiplier.
-    Includes explicit honesty labeling for tag_source ('datahub_native' vs 'inferred' vs 'none').
+    Includes explicit honesty labeling for tag_source ('datahub_native' vs 'inferred' vs 'none')
+    and clamps stacked multipliers to a maximum ceiling of 2.0x with explicit auditing.
     """
     from datahub.metadata.schema_classes import GlobalTagsClass
 
@@ -234,20 +386,29 @@ def resolve_dataset_governance_multiplier(dataset_urn: str) -> Dict[str, Any]:
             if tags_found:
                 tag_source = "inferred"
 
-    if any("business-critical" in t.lower() or "tier-1" in t.lower() for t in tags_found):
-        multiplier = 1.5
+    raw_multiplier = 1.0
+    if "business-critical" in [t.lower() for t in tags_found] and "pii" in [t.lower() for t in tags_found]:
+        raw_multiplier = 1.95  # 1.5 * 1.3 stacked
+    elif any("business-critical" in t.lower() or "tier-1" in t.lower() for t in tags_found):
+        raw_multiplier = 1.5
     elif any("pii" in t.lower() or "sensitive" in t.lower() for t in tags_found):
-        multiplier = 1.3
-    else:
-        multiplier = 1.0
+        raw_multiplier = 1.3
+
+    # Hard clamp ceiling at 2.0x
+    is_multiplier_clamped = raw_multiplier > 2.0
+    multiplier = min(raw_multiplier, 2.0)
 
     reason = f"Applied {multiplier}x multiplier ({tag_source}): {tags_found}" if tags_found else "Default 1.0x multiplier (untagged dataset)."
+    if is_multiplier_clamped:
+        reason += f" (Clamped to 2.0x ceiling from raw {raw_multiplier:.2f}x)"
 
     return {
         "multiplier": multiplier,
         "tags_found": tags_found,
         "tag_source": tag_source,
         "applied_reason": reason,
+        "is_multiplier_clamped": is_multiplier_clamped,
+        "raw_multiplier": raw_multiplier,
     }
 
 

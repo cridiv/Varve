@@ -197,11 +197,32 @@ def find_candidate_incidents(lookback_days: int = 90) -> List[Dict[str, Any]]:
                     event_dt = ev_dict["event_timestamp"]
                     days_between = round((recorded_dt - event_dt).total_seconds() / 86400.0, 1)
 
+                    # Integrate Bounded Financial Risk Calculation
+                    from services.datahub_service import resolve_dataset_financial_baseline
+                    base_info = resolve_dataset_financial_baseline(anom["model_id"])
+                    raw_val = float(anom["value"])
+                    baseline_mrr = base_info["baseline_mrr"]
+                    
+                    # 100% Tautological Baseline Cap Policy: min(raw, baseline)
+                    is_capped = raw_val > baseline_mrr
+                    bounded_val = min(raw_val, baseline_mrr)
+                    
+                    cap_note = ""
+                    if is_capped:
+                        cap_note = (
+                            f" [🛡️ Capped at 100% of dataset baseline (${baseline_mrr:,.0f} · {base_info['baseline_source']}) "
+                            f"— raw projection (${raw_val:,.0f}) capped]"
+                        )
+
                     cand = {
                         "candidate_id": f"cand_{str(anom['metric_id'])[:8]}_{str(ev_dict['event_id'])[:8]}",
                         "model_id": anom["model_id"],
                         "anomaly_metric": anom["metric_name"],
-                        "anomaly_value": float(anom["value"]),
+                        "anomaly_value": bounded_val,
+                        "raw_anomaly_value": raw_val,
+                        "baseline_mrr": baseline_mrr,
+                        "baseline_source": base_info["baseline_source"],
+                        "is_capped": is_capped,
                         "anomaly_date": recorded_dt.isoformat(),
                         "candidate_event_id": str(ev_dict["event_id"]),
                         "candidate_event_type": ev_dict["event_type"],
@@ -209,7 +230,7 @@ def find_candidate_incidents(lookback_days: int = 90) -> List[Dict[str, Any]]:
                         "candidate_actor": ev_dict["actor"],
                         "event_date": event_dt.isoformat(),
                         "days_between": days_between,
-                        "proposed_description": f"Metric '{anom['metric_name']}' anomaly ({anom['value']}) observed {days_between} days after undocumented {ev_dict['node_type']} change by {ev_dict['actor']}."
+                        "proposed_description": f"Metric '{anom['metric_name']}' anomaly (${bounded_val:,.0f}) observed {days_between} days after undocumented {ev_dict['node_type']} change by {ev_dict['actor']}.{cap_note}"
                     }
                     candidates.append(cand)
 
@@ -243,11 +264,13 @@ def find_candidate_incidents(lookback_days: int = 90) -> List[Dict[str, Any]]:
 
 def get_unconfirmed_candidate_incidents() -> List[Dict[str, Any]]:
     """
-    D2.4 Returns all unconfirmed candidate incidents.
-    Automatically runs candidate discovery scan first.
-    """
-    find_candidate_incidents(lookback_days=90)
+    D2.4 Returns all unconfirmed candidate incidents from the database.
 
+    Read-only — does NOT trigger a discovery scan. Scanning is a write
+    operation and should be triggered explicitly (background worker, test
+    script, or POST /scan endpoint), not on every triage page load.
+    This prevents duplicate candidates from accumulating on refresh.
+    """
     query = """
         SELECT candidate_id, model_id, anomaly_metric, anomaly_value, anomaly_date,
                candidate_event_id, days_between, proposed_description, status, created_at
@@ -275,6 +298,7 @@ def get_unconfirmed_candidate_incidents() -> List[Dict[str, Any]]:
             "created_at": r["created_at"].isoformat() if r["created_at"] else None,
         })
     return unconfirmed
+
 
 
 def confirm_candidate_incident(candidate_id: str) -> Dict[str, Any]:

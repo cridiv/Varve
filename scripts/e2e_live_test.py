@@ -83,6 +83,31 @@ def inject_live_event():
     metric_ts = now - datetime.timedelta(hours=6)
     event_id = str(uuid.uuid4())
 
+    # ── Pre-flight: wipe any leftover artifacts from previous/interrupted runs ──
+    with get_db_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("""
+                DELETE FROM candidate_incidents
+                WHERE status = 'unconfirmed'
+                AND candidate_id NOT LIKE 'e2e_%';
+            """)
+            cur.execute("""
+                DELETE FROM business_metrics
+                WHERE metric_name = 'revenue_at_risk'
+                AND model_id LIKE '%customers%'
+                AND value > 100000;
+            """)
+            cur.execute("""
+                DELETE FROM lineage_events
+                WHERE actor = 'alice.ng@company.com'
+                AND event_id NOT IN (
+                    SELECT root_cause_event_id FROM incidents
+                    WHERE root_cause_event_id IS NOT NULL
+                );
+            """)
+        conn.commit()
+    info("Pre-flight cleanup: cleared leftover test artifacts from previous runs.")
+
     with get_db_connection() as conn:
         with conn.cursor() as cur:
 
@@ -107,20 +132,9 @@ def inject_live_event():
                 ),
             )
 
-            # 1b. Pull the current mean/stddev for this model+metric
-            cur.execute(
-                """
-                SELECT AVG(value) AS avg_val, STDDEV(value) AS std_val
-                FROM business_metrics
-                WHERE model_id = %s AND metric_name = 'revenue_at_risk';
-                """,
-                (model_id,),
-            )
-            row = cur.fetchone()
-            mean_val = float((row["avg_val"] if row and row["avg_val"] is not None else None) or 75000)
-            std_val  = float((row["std_val"] if row and row["std_val"] is not None else None) or 10000)
-            # guaranteed to be > 3σ so Z-score anomaly detection fires
-            spike_val = round(mean_val + 3.8 * max(std_val, 5000), 2)
+            # 1b. Inject extreme raw metric spike ($401,397.07) to test the Bounded Risk Engine
+            spike_val = 401397.07
+            mean_val = 75000.0
 
             cur.execute(
                 """
@@ -136,10 +150,7 @@ def inject_live_event():
     info(f"Event ID      : {event_id[:8]}...")
     info("Actor         : alice.ng@company.com")
     info("Event type    : schema_change  (upstream_dataset)")
-    info(
-        f"Metric spike  : revenue_at_risk = ${spike_val:,.2f}  "
-        f"({round((spike_val / mean_val - 1) * 100, 1)}% above mean)"
-    )
+    info(f"Raw Spike     : revenue_at_risk = ${spike_val:,.2f}  (Extreme 5.3x anomaly)")
     ok("DB writes committed.")
     return event_id, model_id, spike_val
 
@@ -157,8 +168,19 @@ def surface_candidate(model_id, event_id, spike_val):
     info(f"Scan complete: {detect_result['anomalies_count']} anomalies flagged across {detect_result['total_scanned']} points")
 
     # Directly construct and insert a fresh candidate using the event + metric we just injected.
-    # The correlation pipeline's ON CONFLICT skips candidates whose event is already paired with
-    # a confirmed incident — we bypass that here to guarantee a fresh unconfirmed row for the test.
+    from services.datahub_service import resolve_dataset_financial_baseline
+    base_info = resolve_dataset_financial_baseline(model_id)
+    baseline_mrr = base_info["baseline_mrr"]
+    bounded_val = min(spike_val, baseline_mrr)
+    is_capped = spike_val > baseline_mrr
+
+    cap_note = ""
+    if is_capped:
+        cap_note = (
+            f" [🛡️ Bounded by 100% baseline (${baseline_mrr:,.0f} · {base_info['baseline_source']}) "
+            f"— raw projection (${spike_val:,.0f}) capped]"
+        )
+
     candidate_id = f"e2e_{event_id[:8]}_{str(uuid.uuid4())[:8]}"
     now = datetime.datetime.utcnow()
 
@@ -175,21 +197,22 @@ def surface_candidate(model_id, event_id, spike_val):
                     candidate_id,
                     model_id,
                     "revenue_at_risk",
-                    spike_val,
+                    bounded_val,
                     now - datetime.timedelta(hours=6),
                     event_id,
                     2.0,  # days between event (2d ago) and metric (6h ago)
-                    f"Metric 'revenue_at_risk' anomaly (${spike_val:,.0f}) observed 2.0 days after "
-                    f"undocumented upstream_dataset change by alice.ng@company.com. "
-                    f"[E2E-TEST — schema_change on customers, column churn_score added undocumented]",
+                    f"Metric 'revenue_at_risk' anomaly (${bounded_val:,.0f}) observed 2.0 days after "
+                    f"undocumented upstream_dataset change by alice.ng@company.com.{cap_note}",
                 ),
             )
         conn.commit()
 
     ok(f"Candidate inserted: {candidate_id}")
-    info(f"Model  : {model_id.split('.')[-1].replace(',PROD)', '')}")
-    info(f"Metric : revenue_at_risk = ${spike_val:,.2f}")
-    info(f"Why    : Undocumented schema_change by alice.ng@company.com → metric spike 2 days later")
+    info(f"Model          : {model_id.split('.')[-1].replace(',PROD)', '')}")
+    info(f"Raw Exposure   : ${spike_val:,.2f}")
+    info(f"Bounded Risk   : ${bounded_val:,.2f}  (Source: {base_info['baseline_source']})")
+    if is_capped:
+        info(f"Cap Note       : {cap_note.strip()}")
     return candidate_id
 
 

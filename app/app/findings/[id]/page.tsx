@@ -389,27 +389,36 @@ export default function FindingDetailPage({ params }: FindingDetailProps) {
               </div>
             </div>
 
-            {/* 2.5 — Governance / Severity Modifiers */}
-            {finding.severity_multiplier && finding.severity_multiplier !== 1.0 && (
-              <div className="p-4 rounded-xl border border-[#1f2028] bg-black flex items-center justify-between text-xs">
-                <div className="flex items-center gap-3">
-                  <span className="text-zinc-400 font-mono">Governance Tag:</span>
-                  <span className="font-mono font-bold text-white bg-zinc-900 px-2.5 py-1 rounded border border-zinc-800">
-                    PII / Business-Critical ({finding.severity_multiplier}x multiplier)
-                  </span>
+            {/* 2.5 — Governance / Severity Modifiers & Baseline Provenance */}
+            {(finding.severity_multiplier && finding.severity_multiplier !== 1.0) || finding.baseline_source ? (
+              <div className="p-4 rounded-xl border border-[#1f2028] bg-black flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <span className="text-zinc-400 font-mono">Governance & Exposure:</span>
+                  {finding.severity_multiplier && finding.severity_multiplier !== 1.0 && (
+                    <span className="font-mono font-bold text-white bg-zinc-900 px-2.5 py-1 rounded border border-zinc-800">
+                      PII / Business-Critical ({finding.severity_multiplier}x multiplier)
+                    </span>
+                  )}
+                  {finding.baseline_source && (
+                    <span className="font-mono text-indigo-300 bg-indigo-950/60 px-2.5 py-1 rounded border border-indigo-800/60">
+                      Baseline: {finding.baseline_source}
+                    </span>
+                  )}
                 </div>
 
                 <span
                   className={`text-[11px] font-mono ${
-                    finding.tag_source === "datahub_native"
+                    finding.tag_source === "datahub_native" || finding.baseline_source === "datahub_native"
                       ? "text-emerald-400 font-semibold"
+                      : finding.baseline_source === "datahub_derived"
+                      ? "text-sky-400 font-semibold"
                       : "text-zinc-500 italic"
                   }`}
                 >
-                  Source: {finding.tag_source_label || finding.tag_source}
+                  Tag Source: {finding.tag_source_label || finding.tag_source || "none"}
                 </span>
               </div>
-            )}
+            ) : null}
 
             {/* 2.6 — Ledger Verification Action & View Audit Modal Trigger */}
             <div className="p-6 rounded-xl border border-[#1f2028] bg-black flex flex-col sm:flex-row sm:items-center justify-between gap-4 text-xs">

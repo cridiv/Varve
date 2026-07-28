@@ -63,6 +63,11 @@ DATAHUB AGENT CONTEXT (MULTI-HOP ML LINEAGE):
 - Upstream Hops Traced: {total_hops}
 - Multi-Hop Graph Lineage Path: {lineage_path}
 
+FINANCIAL EXPOSURE BOUNDING CONTEXT:
+- Monthly Baseline Volume: ${baseline_mrr:,.0f} (Source: {baseline_source})
+- Max Bounded Exposure Value: ${bounded_anomaly_value:,.0f}
+{cap_instruction_prompt}
+
 HISTORICAL INCIDENT CONTEXT:
 {incident_context}
 
@@ -77,7 +82,17 @@ def generate_finding_narrative(classification: Dict[str, Any]) -> Dict[str, str]
     """
     Step 6.1: Calls NVIDIA API with deepseek-ai/deepseek-v4-flash (via OpenAI SDK)
     to generate structured narrative and recommended action for a classified event.
+    Includes Regenerate-over-Replace LLM Sanitizer to prevent numeric hallucination.
     """
+    from services.datahub_service import resolve_dataset_financial_baseline
+    base_info = resolve_dataset_financial_baseline(classification["model_id"])
+    baseline_mrr = base_info["baseline_mrr"]
+    bounded_anomaly_value = min(float(classification.get("anomaly_value", baseline_mrr)), baseline_mrr)
+
+    cap_instruction = (
+        f"CRITICAL CONSTRAINT: Do NOT cite any monetary loss or risk figure exceeding ${baseline_mrr:,.0f}."
+    )
+
     if classification["matched_incidents"]:
         inc = classification["matched_incidents"][0]
         incident_context = (
@@ -112,6 +127,10 @@ def generate_finding_narrative(classification: Dict[str, Any]) -> Dict[str, str]
         retrieved_via=lineage_context.get("retrieved_via", "datahub-agent-context"),
         total_hops=lineage_context.get("total_upstream_hops", 1),
         lineage_path=lineage_context.get("lineage_path", "Direct Node"),
+        baseline_mrr=baseline_mrr,
+        baseline_source=base_info["baseline_source"],
+        bounded_anomaly_value=bounded_anomaly_value,
+        cap_instruction_prompt=cap_instruction,
         incident_context=incident_context,
     )
 
@@ -148,25 +167,43 @@ def generate_finding_narrative(classification: Dict[str, Any]) -> Dict[str, str]
                 raw_text = "\n".join(lines).strip()
 
             parsed = json.loads(raw_text)
+
+            # ── Regenerate-Over-Replace Sanitizer ──────────────────────────────────
+            import re
+            narrative_str = parsed.get("narrative", "")
+            found_dollars = re.findall(r"\$([0-9,]+(?:\.[0-9]{2})?)", narrative_str)
+            breached = False
+            for d in found_dollars:
+                val = float(d.replace(",", ""))
+                if val > baseline_mrr + 1.0:
+                    breached = True
+                    break
+
+            if breached and attempt < max_retries - 1:
+                print(f"🛡️ [Sanitizer Triggered] Found dollar figure exceeding baseline limit ${baseline_mrr:,.0f} in narrative. Triggering 1-shot clean re-generation...")
+                prompt += f"\n\nALERT: Your previous attempt contained a dollar figure exceeding ${baseline_mrr:,.0f}. You MUST re-synthesize without mentioning any number above ${baseline_mrr:,.0f}."
+                continue
+
             return {
                 "narrative": parsed.get("narrative", raw_text),
                 "recommended_action": parsed.get("recommended_action", "Review change with team."),
             }
         except Exception as e:
             if attempt < max_retries - 1:
-                time.sleep(2.0 * (attempt + 1))
+                time.sleep(1.0)
                 continue
             print(f"[warning] DeepSeek LLM synthesis fallback triggered for {classification['event_id']}: {e}")
-        if classification["validated"]:
-            return {
-                "narrative": f"On date of change, {classification['actor']} made an undocumented {classification['node_type']} change on {classification['model_id']}. This change went unreviewed and directly caused a downstream incident after an extended detection lag.",
-                "recommended_action": f"Review threshold and transformation configuration on {classification['model_id']} and add automated assertions.",
-            }
-        else:
-            return {
-                "narrative": f"On date of change, {classification['actor']} added an undocumented {classification['node_type']} to {classification['model_id']}. Superficially unreviewed, but no historical incidents have been traced to this change.",
-                "recommended_action": "No immediate remediation required; flag for routine documentation cleanup.",
-            }
+
+    if classification.get("validated"):
+        return {
+            "narrative": f"On date of change, {classification['actor']} made an undocumented {classification['node_type']} change on {classification['model_id']}. This change went unreviewed and directly caused a downstream incident after an extended detection lag.",
+            "recommended_action": f"Review threshold and transformation configuration on {classification['model_id']} and add automated assertions.",
+        }
+    else:
+        return {
+            "narrative": f"On date of change, {classification['actor']} added an undocumented {classification['node_type']} to {classification['model_id']}. Superficially unreviewed, but no historical incidents have been traced to this change.",
+            "recommended_action": "No immediate remediation required; flag for routine documentation cleanup.",
+        }
 
 
 def process_single_event(eid: str) -> Dict[str, Any]:
