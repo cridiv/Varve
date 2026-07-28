@@ -47,11 +47,9 @@ export default function ConnectPage() {
   const router = useRouter();
 
   // Form Fields (Section 2 Spec)
-  const [gmsUrl, setGmsUrl] = useState<string>(
-    process.env.NEXT_PUBLIC_DATAHUB_GMS_URL || "http://localhost:8080"
-  );
-  const [username, setUsername] = useState<string>("datahub");
-  const [password, setPassword] = useState<string>("datahub");
+  const [gmsUrl, setGmsUrl] = useState<string>("http://localhost:8080");
+  const [username, setUsername] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
 
   // Connection Workflow State
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);

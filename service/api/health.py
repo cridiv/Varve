@@ -21,21 +21,33 @@ from db.connection import get_db_connection
 router = APIRouter(tags=["health"])
 
 
-def verify_datahub_credentials(username: str, password: str, frontend_url: str = "http://localhost:9002") -> tuple[bool, str]:
+def verify_datahub_credentials(username: str, password: str, gms_url: str = "http://localhost:8080") -> tuple[bool, str]:
     """
-    Sends real server-side POST to http://localhost:9002/logIn
+    Validates DataHub host reachability and sends server-side POST to DataHub login endpoint.
     Returns (success: bool, message: str)
     """
-    target_url = f"{frontend_url.rstrip('/')}/logIn"
-    payload_bytes = json.dumps({"username": username, "password": password}).encode("utf-8")
+    from urllib.parse import urlparse
+    parsed = urlparse(gms_url if gms_url else "http://localhost:8080")
+    host = parsed.hostname or "localhost"
+    port = parsed.port or (9002 if "9002" in gms_url else 8080)
 
+    # Derive DataHub frontend auth port (9002 for local DataHub docker)
+    frontend_host = f"http://{host}:9002/logIn"
+
+    # Step 1: Ping the target host to verify it actually exists / is reachable
+    import socket
+    try:
+        sock = socket.create_connection((host, port if port else 8080), timeout=2.0)
+        sock.close()
+    except Exception as e:
+        return False, f"Could not connect to DataHub instance at '{gms_url}' (Connection Refused / Unreachable Host)"
+
+    # Step 2: Live HTTP Authentication against DataHub
+    payload_bytes = json.dumps({"username": username, "password": password}).encode("utf-8")
     req = urllib.request.Request(
-        target_url,
+        frontend_host,
         data=payload_bytes,
-        headers={
-            "Content-Type": "application/json",
-            "Accept": "application/json",
-        },
+        headers={"Content-Type": "application/json", "Accept": "application/json"},
         method="POST"
     )
 
@@ -48,11 +60,7 @@ def verify_datahub_credentials(username: str, password: str, frontend_url: str =
             return False, "Invalid DataHub credentials"
         return False, f"DataHub login returned HTTP {e.code}"
     except Exception as e:
-        print(f"[verify_datahub_credentials connection warning]: {e}")
-        # Quickstart fallback check
-        if username and password and (password.lower() in ("datahub", "varve") or username.lower() in ("datahub", "varve")):
-            return True, f"Authenticated with DataHub instance as '{username}'"
-        return False, "Invalid DataHub credentials"
+        return False, f"Failed to authenticate with DataHub endpoint at '{frontend_host}': {e}"
 
     return False, "Invalid DataHub credentials"
 
@@ -78,13 +86,13 @@ def health():
 def connect_datahub(payload: DataHubConnectPayload):
     username = payload.username or "datahub"
     password = payload.password or "datahub"
-    auth_ok, auth_msg = verify_datahub_credentials(username, password)
+    auth_ok, auth_msg = verify_datahub_credentials(username, password, gms_url=payload.gms_url)
     if not auth_ok:
         return {
             "connected": False,
             "status": "auth_failed",
-            "message": "Invalid DataHub credentials",
-            "error": "Invalid DataHub credentials",
+            "message": auth_msg,
+            "error": auth_msg,
         }
 
     target_url = payload.gms_url or DATAHUB_GMS_URL
@@ -117,14 +125,14 @@ def step_gms(payload: DataHubStepPayload):
     password = payload.password or "datahub"
 
     # Real server-side HTTP POST call to http://localhost:9002/logIn
-    auth_ok, auth_msg = verify_datahub_credentials(username, password)
+    auth_ok, auth_msg = verify_datahub_credentials(username, password, gms_url=payload.gms_url)
     if not auth_ok:
         return {
             "ok": False,
             "step": "gms",
             "label": "Connecting to DataHub GMS...",
-            "error": "Invalid DataHub credentials",
-            "detail": "DataHub returned 400: Invalid Credentials",
+            "error": auth_msg,
+            "detail": f"Connection check failed: {auth_msg}",
         }
 
     target_url = payload.gms_url or DATAHUB_GMS_URL
