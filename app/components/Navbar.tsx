@@ -2,8 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 export default function Navbar() {
+  const pathname = usePathname();
+
   return (
     <header className="relative z-20 w-full max-w-7xl mx-auto px-6 py-4 sm:py-5 flex items-center justify-between">
       {/* Left: Brand Logo */}
@@ -63,12 +66,16 @@ export default function Navbar() {
           </svg>
         </a>
 
-        {/* Connect Button -> Redirects to /connect */}
+        {/* Connect Button -> Redirects to /connect or shows Active state */}
         <Link
           href="/connect"
-          className="relative group inline-flex items-center justify-center px-4 py-2 rounded-xl text-xs font-semibold text-zinc-200 transition-all cursor-pointer select-none border border-white/15 bg-gradient-to-b from-zinc-800/90 via-zinc-900/90 to-zinc-950/95 backdrop-blur-xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2),_0_4px_12px_-2px_rgba(0,0,0,0.6)] hover:border-white/25 hover:text-white hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.3),_0_6px_16px_-2px_rgba(0,0,0,0.8)] active:translate-y-[1px] active:shadow-inner"
+          className={`relative group inline-flex items-center justify-center px-4 py-2 rounded-xl text-xs font-semibold transition-all select-none border border-white/15 backdrop-blur-xl shadow-sm ${
+            pathname === "/connect"
+              ? "bg-[#9B7FF6]/20 border-[#9B7FF6]/50 text-[#9B7FF6] pointer-events-none"
+              : "bg-gradient-to-b from-zinc-800/90 via-zinc-900/90 to-zinc-950/95 text-zinc-200 hover:border-white/25 hover:text-white hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.3),_0_6px_16px_-2px_rgba(0,0,0,0.8)] active:translate-y-[1px]"
+          }`}
         >
-          Connect
+          {pathname === "/connect" ? "Connecting" : "Connect"}
         </Link>
       </div>
     </header>

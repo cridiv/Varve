@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { executeConnectionStep, StepResult } from "@/lib/api";
+import Navbar from "@/components/Navbar";
 
 type StepKey = "gms" | "lineage" | "ownership" | "governance" | "incidents";
 
@@ -69,12 +70,12 @@ export default function ConnectPage() {
     return "IC";
   };
 
-  const runConnectionSequence = async (startFromIndex = 0) => {
+  const runConnectionSequence = async (startIndex: number = 0) => {
     setIsSubmitting(true);
     let currentSteps = [...steps];
 
-    for (let i = startFromIndex; i < currentSteps.length; i++) {
-      const stepKey = currentSteps[i].key;
+    for (let i = startIndex; i < INITIAL_STEPS.length; i++) {
+      const stepKey = INITIAL_STEPS[i].key;
       setActiveStepIndex(i);
 
       // Set current step to pending
@@ -145,6 +146,7 @@ export default function ConnectPage() {
     }
 
     // All steps succeeded
+    setIsSubmitting(false);
     setIsComplete(true);
 
     // Store minimal identity info in localStorage for Screen 1 top-bar avatar (Section 4 Spec)
@@ -182,12 +184,16 @@ export default function ConnectPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#15131F] text-zinc-100 font-sans flex flex-col items-center justify-center p-6 selection:bg-[#9B7FF6] selection:text-white antialiased relative overflow-hidden">
-      {/* Background Ambient Glow for visual continuity with dashboard */}
+    <div className="min-h-screen bg-[#050507] text-zinc-100 font-sans flex flex-col selection:bg-[#9B7FF6] selection:text-white antialiased relative overflow-hidden">
+      {/* Landing Navbar */}
+      <Navbar />
+
+      {/* Background Ambient Glow */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] bg-[#9B7FF6]/10 rounded-full blur-[140px] pointer-events-none" />
 
-      {/* Centered Standalone Card */}
-      <main className="relative z-10 w-full max-w-md p-8 sm:p-10 rounded-2xl border border-white/10 bg-zinc-950/80 backdrop-blur-2xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9),_inset_0_1px_0_0_rgba(255,255,255,0.12)] flex flex-col items-center text-center space-y-6">
+      {/* Main Centered Connect Card */}
+      <div className="flex-1 flex items-center justify-center p-6 relative z-10">
+        <main className="w-full max-w-md p-8 sm:p-10 rounded-2xl border border-white/10 bg-zinc-950/80 backdrop-blur-2xl shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9),_inset_0_1px_0_0_rgba(255,255,255,0.12)] flex flex-col items-center text-center space-y-6">
         
         {/* Top Logo & Short Tagline */}
         <div className="flex flex-col items-center space-y-3">
@@ -204,75 +210,86 @@ export default function ConnectPage() {
           </p>
         </div>
 
-        {/* SECTION 2 — Simple 2-Field Form (Before Submit) */}
-        {!isSubmitting && activeStepIndex === -1 && (
-          <form onSubmit={handleSubmit} className="w-full space-y-4 text-left pt-2">
-            {/* Field 1: DataHub Instance URL */}
+        {/* SECTION 2 — 2-Field Credentials Form */}
+        <form onSubmit={handleSubmit} className="w-full space-y-4 text-left pt-2">
+          {/* Field 1: DataHub Instance URL */}
+          <div>
+            <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
+              DataHub Instance URL
+            </label>
+            <input
+              type="text"
+              value={gmsUrl}
+              disabled={isSubmitting}
+              onChange={(e) => setGmsUrl(e.target.value)}
+              placeholder="http://localhost:8080"
+              required
+              className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900/90 border border-white/10 text-xs font-mono text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#9B7FF6] focus:ring-1 focus:ring-[#9B7FF6] transition-all disabled:opacity-50"
+            />
+          </div>
+
+          {/* Field 2: Credentials Group (Username / Password) */}
+          <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
-                DataHub Instance URL
+                Username
               </label>
               <input
                 type="text"
-                value={gmsUrl}
-                onChange={(e) => setGmsUrl(e.target.value)}
-                placeholder="http://localhost:8080"
+                value={username}
+                disabled={isSubmitting}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="varve"
                 required
-                className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900/90 border border-white/10 text-xs font-mono text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#9B7FF6] focus:ring-1 focus:ring-[#9B7FF6] transition-all"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900/90 border border-white/10 text-xs font-mono text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#9B7FF6] focus:ring-1 focus:ring-[#9B7FF6] transition-all disabled:opacity-50"
               />
             </div>
+            <div>
+              <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
+                Password
+              </label>
+              <input
+                type="password"
+                value={password}
+                disabled={isSubmitting}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="varve"
+                required
+                className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900/90 border border-white/10 text-xs font-mono text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#9B7FF6] focus:ring-1 focus:ring-[#9B7FF6] transition-all disabled:opacity-50"
+              />
+            </div>
+          </div>
 
-            {/* Field 2: Single Credentials Group (Username / Password) */}
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
-                  Username
-                </label>
-                <input
-                  type="text"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  placeholder="varve"
-                  required
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900/90 border border-white/10 text-xs font-mono text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#9B7FF6] focus:ring-1 focus:ring-[#9B7FF6] transition-all"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-zinc-300 uppercase tracking-wider mb-1.5">
-                  Password
-                </label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="varve"
-                  required
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-zinc-900/90 border border-white/10 text-xs font-mono text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-[#9B7FF6] focus:ring-1 focus:ring-[#9B7FF6] transition-all"
-                />
+          {/* Real DataHub Authentication Error Banner */}
+          {formError && (
+            <div className="p-3.5 rounded-xl bg-rose-950/80 border border-rose-500/40 text-rose-300 text-xs font-mono flex items-start gap-2.5 animate-in fade-in duration-200">
+              <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0 mt-1 animate-ping" />
+              <div className="flex-1">
+                <strong className="block text-rose-200 font-bold mb-0.5">Authentication Failed</strong>
+                <span>{formError} — check your DataHub URL & credentials.</span>
               </div>
             </div>
+          )}
 
-            {/* Real DataHub Authentication Error Banner */}
-            {formError && (
-              <div className="p-3.5 rounded-xl bg-rose-950/80 border border-rose-500/40 text-rose-300 text-xs font-mono flex items-start gap-2.5 animate-in fade-in duration-200">
-                <span className="w-2 h-2 rounded-full bg-rose-500 shrink-0 mt-1 animate-ping" />
-                <div className="flex-1">
-                  <strong className="block text-rose-200 font-bold mb-0.5">Authentication Failed</strong>
-                  <span>{formError} — please check your DataHub username & password.</span>
-                </div>
-              </div>
+          {/* Submit Action Button with Active Loader */}
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="w-full relative group inline-flex items-center justify-center gap-2 px-6 py-3.5 mt-2 rounded-xl font-semibold text-xs text-white transition-all cursor-pointer select-none border border-white/15 bg-gradient-to-b from-zinc-800/90 via-zinc-900/90 to-zinc-950/95 backdrop-blur-xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2),_0_4px_20px_-2px_rgba(0,0,0,0.6),_0_0_15px_-3px_rgba(155,127,246,0.25)] hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.35),_0_6px_25px_-2px_rgba(0,0,0,0.8),_0_0_22px_-2px_rgba(155,127,246,0.4)] hover:border-white/25 active:translate-y-[1px] disabled:opacity-75 disabled:cursor-not-allowed"
+          >
+            {isSubmitting ? (
+              <>
+                <span className="w-4 h-4 rounded-full border-2 border-white/20 border-t-[#9B7FF6] animate-spin" />
+                <span>Connecting to DataHub...</span>
+              </>
+            ) : (
+              <>
+                <span>Connect to DataHub</span>
+                <span className="text-[#9B7FF6] group-hover:translate-x-0.5 transition-transform">&rarr;</span>
+              </>
             )}
-
-            {/* Submit Action Button */}
-            <button
-              type="submit"
-              className="w-full relative group inline-flex items-center justify-center gap-2 px-6 py-3.5 mt-2 rounded-xl font-semibold text-xs text-white transition-all cursor-pointer select-none border border-white/15 bg-gradient-to-b from-zinc-800/90 via-zinc-900/90 to-zinc-950/95 backdrop-blur-xl shadow-[inset_0_1px_0_0_rgba(255,255,255,0.2),_0_4px_20px_-2px_rgba(0,0,0,0.6),_0_0_15px_-3px_rgba(155,127,246,0.25)] hover:shadow-[inset_0_1px_0_0_rgba(255,255,255,0.35),_0_6px_25px_-2px_rgba(0,0,0,0.8),_0_0_22px_-2px_rgba(155,127,246,0.4)] hover:border-white/25 active:translate-y-[1px]"
-            >
-              <span>Connect to DataHub</span>
-              <span className="text-[#9B7FF6] group-hover:translate-x-0.5 transition-transform">&rarr;</span>
-            </button>
-          </form>
-        )}
+          </button>
+        </form>
 
         {/* SECTION 3 — Live Step-by-Step Connection Sequence */}
         {(isSubmitting || activeStepIndex >= 0) && (
@@ -337,14 +354,14 @@ export default function ConnectPage() {
                   {/* Real Backend Detail Output */}
                   {st.detail && (
                     <div className="pl-6 font-mono text-[11px] text-zinc-400">
-                      └ {st.detail}
+                      {"└ "}{st.detail}
                     </div>
                   )}
 
                   {/* Error Detail Message */}
                   {st.errorMsg && (
                     <div className="pl-6 font-mono text-[11px] text-rose-400">
-                      └ Error: {st.errorMsg}
+                      {"└ Error: "}{st.errorMsg}
                     </div>
                   )}
                 </div>
@@ -359,7 +376,8 @@ export default function ConnectPage() {
             )}
           </div>
         )}
-      </main>
+        </main>
+      </div>
     </div>
   );
 }
