@@ -165,9 +165,28 @@ export default function PendingReviewPanel({ onCandidateActionSuccess }: Pending
                     )}
                   </div>
 
-                  <p className="text-xs text-zinc-400 leading-snug">
-                    {cand.proposed_description}
-                  </p>
+                  {(() => {
+                    const desc = cand.proposed_description || "";
+                    const capMatch = desc.match(/\[🛡️(.*?)\]/);
+                    const cleanDesc = desc.replace(/\[🛡️.*?\]/, "").trim();
+                    const capText = capMatch ? capMatch[1] : null;
+
+                    return (
+                      <>
+                        <p className="text-xs text-zinc-400 leading-snug">
+                          {cleanDesc}
+                        </p>
+                        {capText && (
+                          <div className="pt-1">
+                            <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-mono text-amber-400/90 bg-amber-950/40 border border-amber-800/40">
+                              <span>🛡️</span>
+                              <span>{capText.trim()}</span>
+                            </span>
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
 

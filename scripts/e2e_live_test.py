@@ -22,6 +22,8 @@ import time
 import uuid
 import datetime
 import requests
+import warnings
+warnings.filterwarnings("ignore", category=Warning)
 
 # ── path setup ────────────────────────────────────────────────────────────────
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -86,10 +88,17 @@ def inject_live_event():
     # ── Pre-flight: wipe any leftover artifacts from previous/interrupted runs ──
     with get_db_connection() as conn:
         with conn.cursor() as cur:
+            # Delete candidates referencing unconfirmed alice.ng test events first (FK order)
             cur.execute("""
                 DELETE FROM candidate_incidents
-                WHERE status = 'unconfirmed'
-                AND candidate_id NOT LIKE 'e2e_%';
+                WHERE candidate_event_id IN (
+                    SELECT event_id FROM lineage_events
+                    WHERE actor = 'alice.ng@company.com'
+                    AND event_id NOT IN (
+                        SELECT root_cause_event_id FROM incidents
+                        WHERE root_cause_event_id IS NOT NULL
+                    )
+                ) OR candidate_id LIKE 'e2e_%';
             """)
             cur.execute("""
                 DELETE FROM business_metrics
