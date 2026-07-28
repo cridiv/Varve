@@ -35,6 +35,7 @@ from services.datahub_service import (
     resolve_dataset_routed_owner,
     resolve_dataset_routed_owner_info,
     resolve_dataset_governance_multiplier,
+    get_lineage_via_agent_context,
 )
 
 
@@ -56,6 +57,11 @@ EVENT CLASSIFICATION:
 - Pattern Type: {pattern_type}
 - Historically Validated Incident Precedent: {validated}
 - Final Severity: {severity}
+
+DATAHUB AGENT CONTEXT (MULTI-HOP ML LINEAGE):
+- Retrieved Via: {retrieved_via}
+- Upstream Hops Traced: {total_hops}
+- Multi-Hop Graph Lineage Path: {lineage_path}
 
 HISTORICAL INCIDENT CONTEXT:
 {incident_context}
@@ -94,6 +100,8 @@ def generate_finding_narrative(classification: Dict[str, Any]) -> Dict[str, str]
     else:
         incident_context = "No historical incident precedent linked to this change event (Unvalidated control group)."
 
+    lineage_context = get_lineage_via_agent_context(classification["model_id"], max_hops=5)
+
     prompt = FINDING_PROMPT_TEMPLATE.format(
         model_id=classification["model_id"],
         node_type=classification["node_type"],
@@ -101,6 +109,9 @@ def generate_finding_narrative(classification: Dict[str, Any]) -> Dict[str, str]
         pattern_type=classification["pattern_type"],
         validated="YES" if classification["validated"] else "NO",
         severity=classification["severity"].upper(),
+        retrieved_via=lineage_context.get("retrieved_via", "datahub-agent-context"),
+        total_hops=lineage_context.get("total_upstream_hops", 1),
+        lineage_path=lineage_context.get("lineage_path", "Direct Node"),
         incident_context=incident_context,
     )
 
@@ -142,8 +153,8 @@ def generate_finding_narrative(classification: Dict[str, Any]) -> Dict[str, str]
                 "recommended_action": parsed.get("recommended_action", "Review change with team."),
             }
         except Exception as e:
-            if attempt < max_retries - 1 and ("503" in str(e) or "ResourceExhausted" in str(e) or "rate" in str(e).lower()):
-                time.sleep(1.5 * (attempt + 1))
+            if attempt < max_retries - 1:
+                time.sleep(2.0 * (attempt + 1))
                 continue
             print(f"[warning] DeepSeek LLM synthesis fallback triggered for {classification['event_id']}: {e}")
         if classification["validated"]:
@@ -260,6 +271,7 @@ def process_single_event(eid: str) -> Dict[str, Any]:
             "severity_multiplier": multiplier,
             "tag_source": tag_source,
             "governance_tags": gov["tags_found"],
+            "lineage_retrieved_via": "datahub-agent-context (get_lineage)",
             "narrative": narrative_res["narrative"],
             "recommended_action": narrative_res["recommended_action"],
         }

@@ -47,6 +47,72 @@ def get_datahub_graph() -> DataHubGraph:
     return DataHubGraph(config)
 
 
+def get_lineage_via_agent_context(dataset_urn: str, max_hops: int = 5) -> Dict[str, Any]:
+    """
+    Retrieves multi-hop lineage, governance tags, and structured properties
+    directly using DataHub's Agent Context Kit (datahub_agent_context.mcp_tools.lineage).
+    """
+    try:
+        from datahub.sdk.main_client import DataHubClient
+        from datahub_agent_context import set_client
+        from datahub_agent_context.mcp_tools.lineage import get_lineage
+
+        client = DataHubClient(server=DATAHUB_GMS_URL, token=DATAHUB_GMS_TOKEN)
+        set_client(client)
+
+        res = get_lineage(urn=dataset_urn, upstream=True, max_hops=max_hops)
+        search_results = res.get("upstreams", {}).get("searchResults", [])
+
+        sorted_results = sorted(search_results, key=lambda x: x.get("degree", 0), reverse=True)
+
+        hops = []
+        tags_found = []
+        structured_props = {}
+
+        for item in sorted_results:
+            ent = item.get("entity", {})
+            deg = item.get("degree")
+            plat = ent.get("platform", {}).get("name") if isinstance(ent.get("platform"), dict) else ""
+            name = ent.get("name") or ent.get("properties", {}).get("name") or ent.get("urn", "").split(":")[-1]
+            if name:
+                label = f"{plat}:{name}" if plat else name
+                hops.append(f"{label} [deg {deg}]")
+
+            gt = ent.get("glossaryTerms", {}).get("terms", [])
+            for term_obj in gt:
+                t_name = term_obj.get("term", {}).get("properties", {}).get("name")
+                if t_name and t_name not in tags_found:
+                    tags_found.append(t_name)
+
+            sp = ent.get("structuredProperties", {}).get("properties", [])
+            for prop in sp:
+                def_name = prop.get("structuredProperty", {}).get("definition", {}).get("displayName")
+                vals = prop.get("values", [])
+                if def_name and vals:
+                    v = vals[0].get("stringValue") or vals[0].get("numberValue")
+                    if v and def_name not in structured_props:
+                        structured_props[def_name] = v
+
+        path_str = " ➔ ".join(hops) if hops else "Direct Node"
+
+        return {
+            "retrieved_via": "datahub-agent-context (get_lineage)",
+            "total_upstream_hops": len(hops),
+            "lineage_path": path_str,
+            "governance_tags": tags_found,
+            "structured_properties": structured_props,
+        }
+    except Exception as e:
+        print(f"[warning] DataHub Agent Context lineage lookup fallback for {dataset_urn}: {e}")
+        return {
+            "retrieved_via": "direct_fallback",
+            "total_upstream_hops": 1,
+            "lineage_path": dataset_urn.split(".")[-1].replace(",PROD)", ""),
+            "governance_tags": [],
+            "structured_properties": {},
+        }
+
+
 def parse_owner_name(target_user_urn: str) -> str:
     user_id = target_user_urn.replace("urn:li:corpuser:", "")
     if "@" in user_id:
