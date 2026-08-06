@@ -177,27 +177,40 @@ Stated plainly rather than concealed:
 datahub docker quickstart
 datahub datapack load showcase-ecommerce
 
+### Option A: 1-Command Startup with Docker Compose (Recommended)
+
+```bash
+# Set your API keys in .env
+cp service/.env.example service/.env   # fill in MODEL_API_KEY and SLACK_WEBHOOK_URL
+
+# Spin up Postgres, FastAPI Backend (port 8001), and Next.js Frontend (port 3000)
+docker compose up -d
+
+# Run the live human-in-the-loop verification harness
+cd scripts
+../service/.venv/bin/python e2e_live_test.py
+```
+
+---
+
+### Option B: Manual Local Development
+
+```bash
+# 1. Clone
+git clone https://github.com/your-org/varve.git
+cd varve
+
 # 2. Start Postgres
 docker run --name varve-postgres \
   -e POSTGRES_USER=varve -e POSTGRES_PASSWORD=varve -e POSTGRES_DB=varve \
   -p 5433:5432 -d postgres:16
 
-# 3. Apply schema and seed the ground-truth narrative
-docker exec -i varve-postgres psql -U varve -d varve < service/db/schema.sql
-python3 service/scripts/seed_from_narrative.py
+# 3. Start Backend & Frontend
+cd service && .venv/bin/python main.py   # runs FastAPI on http://localhost:8001
+cd app && npm run dev                    # runs Next.js on http://localhost:3000
 
-# 4. Configure environment
-cp .env.example .env   # fill in your DataHub and LLM API credentials
-
-# 5. Run the backend
-uvicorn service.main:app --reload --port 8000
-
-# 6. Run the full end-to-end verification harness
-python3 service/scripts/verify_e2e.py
-
-# 7. Independently verify the audit ledger and regenerate the validation report
-python3 service/scripts/verify_ledger.py
-python3 service/scripts/generate_validation_report.py
+# 4. Run the full end-to-end verification harness
+cd scripts && ../service/.venv/bin/python e2e_live_test.py
 ```
 
 ---

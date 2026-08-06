@@ -1,0 +1,55 @@
+services:
+  varve-postgres:
+    image: postgres:16
+    container_name: varve-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: varve
+      POSTGRES_PASSWORD: varve
+      POSTGRES_DB: varve
+    ports:
+      - "5433:5432"
+    volumes:
+      - varve-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U varve -d varve"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  varve-backend:
+    build:
+      context: ./service
+      dockerfile: Dockerfile
+    container_name: varve-backend
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      PORT: "8001"
+      VARVE_POSTGRES_DSN: "postgresql://varve:varve@varve-postgres:5432/varve"
+      DATAHUB_GMS_URL: "http://host.docker.internal:8080"
+      FRONTEND_BASE_URL: "http://localhost:3000"
+      MODEL_API_KEY: "${MODEL_API_KEY}"
+      SLACK_WEBHOOK_URL: "${SLACK_WEBHOOK_URL}"
+    depends_on:
+      varve-postgres:
+        condition: service_healthy
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  varve-frontend:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: varve-frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: "http://localhost:8001"
+    depends_on:
+      - varve-backend
+
+volumes:
+  varve-pgdata:
