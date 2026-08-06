@@ -36,7 +36,7 @@ from db.connection import get_db_connection
 from services.datahub_service import writeback_finding_to_datahub
 
 # ── config ────────────────────────────────────────────────────────────────────
-BACKEND = "http://localhost:8000"
+BACKEND = os.environ.get("VARVE_BACKEND_URL", "http://localhost:8001")
 FRONTEND = "http://localhost:3000"
 POLL_INTERVAL_S = 3
 POLL_TIMEOUT_S = 300

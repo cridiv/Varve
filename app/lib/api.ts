@@ -9,7 +9,7 @@ import { LedgerEntryRow } from "@/components/triage/AuditModal";
 import { ActorHistoryResponse } from "@/components/triage/ActorHistoryBoard";
 
 export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+  process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8001";
 
 // Helper for default headers
 const defaultHeaders = {
