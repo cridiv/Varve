@@ -34,19 +34,33 @@ EVIDENCE_SCOPE_LABEL = {
 
 def friendly_model_name(urn_or_name: str) -> str:
     """
-    Extract a short, readable name from a DataHub URN, or pass through
-    if it's already a friendly name. Never show a raw URN in a Slack message.
+    Extract a short, readable name from a DataHub URN, dot-separated path,
+    or raw name. Never show raw URNs or full schema paths in Slack notifications.
 
-    e.g. "urn:li:dataset:(urn:li:dataPlatform:dbt,b2fd91.order_entry_db.order_entry.customers,PROD)"
-    → "customers"
+    e.g. "urn:li:dataset:(urn:li:dataPlatform:dbt,b2fd91.order_entry_db.order_entry.customers,PROD)" → "customers"
+    e.g. "b2fd91.order_entry_db.order_entry.customers" → "customers"
     """
-    if not urn_or_name.startswith("urn:li:dataset:"):
-        return urn_or_name
-    try:
-        inner = urn_or_name.split(",")[1]   # "b2fd91.order_entry_db.order_entry.customers"
-        return inner.split(".")[-1]
-    except (IndexError, AttributeError):
-        return urn_or_name
+    if not urn_or_name:
+        return "unknown model"
+
+    clean = str(urn_or_name).strip()
+
+    if "urn:li:dataset:" in clean:
+        try:
+            parts = clean.split(",")
+            if len(parts) >= 2:
+                clean = parts[1].strip()
+            else:
+                clean = clean.split(":")[-1]
+        except Exception:
+            pass
+
+    clean = clean.rstrip(")").rstrip(";").strip()
+
+    if "." in clean:
+        clean = clean.split(".")[-1]
+
+    return clean if clean else str(urn_or_name)
 
 
 def format_lag(avg_detection_lag_days: float) -> str:

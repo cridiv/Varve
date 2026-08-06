@@ -9,6 +9,7 @@ Core business logic:
 import sys
 import os
 import time
+import json
 from typing import Dict, Any
 
 service_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -425,8 +426,12 @@ def writeback_finding_to_datahub(finding_id: str, force: bool = False) -> Dict[s
             f.validated,
             f.narrative,
             f.recommended_action,
+            e.event_id          AS lineage_event_id,
             e.node_urn,
-            e.actor
+            e.actor,
+            e.node_type,
+            e.actor_departed_within_90d,
+            e.documentation_present
         FROM findings f
         JOIN lineage_events e ON f.related_event_id = e.event_id
         WHERE f.finding_id = %s;
@@ -443,9 +448,96 @@ def writeback_finding_to_datahub(finding_id: str, force: bool = False) -> Dict[s
     dataset_urn = finding["node_urn"]
 
     finding_link_url = f"{FRONTEND_BASE_URL.rstrip('/')}/findings/{finding_id}"
+
+    # --- Build structured ValidatedRiskPattern payload ---
+    # The RFC-proposed aspect is not a registered DataHub type, so we embed the
+    # structured fields as JSON inside the InstitutionalMemory description.
+    # Anything that reads this annotation can parse the vrp block.
+    vrp_payload: Dict[str, Any] = {
+        "patternType": None,
+        "scopeKey": None,
+        "timesObserved": None,
+        "timesPrecededIncident": None,
+        "avgDetectionLagDays": None,
+        "evidenceTier": "INDUSTRY_GENERAL",
+        "evidenceSourceNote": None,
+        "lastValidatedAt": int(time.time() * 1000),
+        "sourceAgent": "varve",
+    }
+    try:
+        from services.correlation_service import classify_pattern
+        classification = classify_pattern(str(finding["lineage_event_id"]))
+        scope_key = classification.get("scope_key", "unknown")
+        pattern_type = classification.get("pattern_type")
+        resolution_reason = classification.get("resolution_reason")
+
+        # Map internal scope to RFC evidenceTier values & VRP scope key
+        if scope_key == "model":
+            evidence_tier = "ORG_VALIDATED"
+            vrp_scope_key = dataset_urn
+        elif scope_key == "actor" or (classification.get("validated") and scope_key not in ("industry_general", "default_unvalidated")):
+            evidence_tier = "ACTOR_VALIDATED"
+            vrp_scope_key = finding.get("actor") or classification.get("actor") or "unknown"
+        elif scope_key == "industry_general":
+            evidence_tier = "INDUSTRY_GENERAL"
+            vrp_scope_key = "industry_general"
+        else:
+            evidence_tier = "INDUSTRY_GENERAL"
+            vrp_scope_key = scope_key
+
+        # Look up the rollup counts from the patterns table for this scope + pattern
+        # Note: patterns table stores dataset URN for model scope, actor string for actor scope, or 'org_wide'
+        db_lookup_keys = []
+        if scope_key == "model":
+            db_lookup_keys = [dataset_urn, finding.get("model_id"), "org_wide"]
+        elif scope_key == "actor":
+            db_lookup_keys = [finding.get("actor"), classification.get("actor"), "org_wide"]
+        else:
+            db_lookup_keys = [scope_key, dataset_urn, finding.get("actor"), "org_wide"]
+
+        db_lookup_keys = [k for k in db_lookup_keys if k]
+
+        times_observed = None
+        times_preceded = None
+        avg_lag = None
+        try:
+            with get_db_connection() as conn:
+                with conn.cursor() as cur:
+                    for lookup_key in db_lookup_keys:
+                        cur.execute("""
+                            SELECT times_observed, times_preceded_incident, avg_detection_lag_days
+                            FROM patterns
+                            WHERE scope_key = %s AND pattern_type = %s
+                            LIMIT 1;
+                        """, (lookup_key, pattern_type))
+                        pat_row = cur.fetchone()
+                        if pat_row:
+                            times_observed = pat_row["times_observed"]
+                            times_preceded = pat_row["times_preceded_incident"]
+                            avg_lag = float(pat_row["avg_detection_lag_days"]) if pat_row["avg_detection_lag_days"] is not None else None
+                            break
+        except Exception as pat_err:
+            print(f"[warning] Could not fetch pattern row for vrp payload: {pat_err}")
+
+        vrp_payload.update({
+            "patternType": pattern_type,
+            "scopeKey": vrp_scope_key,
+            "timesObserved": times_observed,
+            "timesPrecededIncident": times_preceded,
+            "avgDetectionLagDays": avg_lag,
+            "evidenceTier": evidence_tier,
+            "evidenceSourceNote": resolution_reason,
+        })
+    except Exception as vrp_err:
+        print(f"[warning] Could not compute vrp payload for finding '{finding_id}': {vrp_err}")
+
+    # Compose description: human-readable prose + machine-parseable vrp block
     annotation_text = (
         f"⚠️ Varve Risk Finding [{finding['severity'].upper()}]: {finding['narrative']} "
-        f"Recommended Action: {finding['recommended_action']}"
+        f"Recommended Action: {finding['recommended_action']}\n"
+        f"---vrp-start---\n"
+        f"{json.dumps({'vrp': vrp_payload}, separators=(',', ':'))}\n"
+        f"---vrp-end---"
     )
 
     # Idempotency Guard: Check if a writeback event for this finding already exists in the ledger or findings table

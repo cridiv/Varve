@@ -188,8 +188,11 @@ export default function ConnectPage() {
       {/* Landing Navbar */}
       <Navbar />
 
-      {/* Background Ambient Glow */}
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[550px] h-[550px] bg-[#9B7FF6]/10 rounded-full blur-[140px] pointer-events-none" />
+      {/* Background Ambient Glow — large outer ring */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[700px] bg-[#9B7FF6]/8 rounded-full blur-[160px] pointer-events-none" />
+
+      {/* Background Ambient Glow — tighter inner ring behind card */}
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[380px] h-[380px] bg-[#9B7FF6]/15 rounded-full blur-[90px] pointer-events-none" />
 
       {/* Main Centered Connect Card */}
       <div className="flex-1 flex items-center justify-center p-6 relative z-10">

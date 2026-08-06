@@ -329,7 +329,7 @@ def fire_slack_alert(model_id):
 # ═══════════════════════════════════════════════════════════════════
 
 def datahub_writeback(candidate_id, model_id):
-    banner("PHASE 6 — Writing ValidatedRiskPattern → DataHub", YELLOW)
+    banner("PHASE 6 — Writing ValidatedRiskPattern → DataHub (InstitutionalMemory)", YELLOW)
     model_short = model_id.split(".")[-1].replace(",PROD)", "")
 
     # Look up a finding for this model to pass to the real writeback function
@@ -345,19 +345,89 @@ def datahub_writeback(candidate_id, model_id):
         )
         if not match:
             warn("No finding to write back — skipping DataHub phase.")
-            return
+            return None
 
         finding_id = match["finding_id"]
         info(f"Writing back finding: {finding_id[:8]}...  (force=True to re-emit)")
+
+        # Refresh the patterns rollup so timesObserved / timesPrecededIncident / avgDetectionLagDays
+        # reflect the incident that was just confirmed in Phase 4. Without this, the patterns
+        # table has no row for the fresh event and those three VRP fields come back null.
+        try:
+            from services.correlation_service import populate_patterns
+            info("Refreshing patterns rollup (populate_patterns)...")
+            populate_patterns()
+            ok("Patterns table updated — VRP rollup counts are fresh.")
+        except Exception as pop_err:
+            warn(f"populate_patterns() failed (VRP counts may be null): {pop_err}")
+
         result = writeback_finding_to_datahub(finding_id, force=True)
-        if result.get("ok"):
-            ok("DataHub writeback succeeded — InstitutionalMemory aspect emitted.")
-            info(f"URN: {result.get('node_urn', model_id)}")
+
+        # writeback_finding_to_datahub returns {status, dataset_urn, annotation_text, ...}
+        write_status = result.get("status", "unknown")
+        if write_status in ("written_back", "already_written_back"):
+            ok(f"DataHub InstitutionalMemory aspect emitted  (status={write_status})")
+            info(f"Dataset URN  : {result.get('dataset_urn', '?')}")
+            if result.get("ledger_id"):
+                info(f"Ledger ID    : {result['ledger_id']}")
+            if result.get("this_hash"):
+                info(f"Hash chain   : {result['this_hash'][:16]}...")
+
+            # ── VRP block verification ─────────────────────────────────────────
+            # Parse the structured vrp JSON embedded between the sentinels and
+            # confirm every RFC-spec field is present.
+            import json as _json
+            annotation_text = result.get("annotation_text", "")
+            vrp_data = None
+            if "---vrp-start---" in annotation_text and "---vrp-end---" in annotation_text:
+                try:
+                    vrp_raw = annotation_text.split("---vrp-start---")[1].split("---vrp-end---")[0].strip()
+                    vrp_data = _json.loads(vrp_raw).get("vrp", {})
+                except Exception as parse_err:
+                    warn(f"VRP JSON parse error: {parse_err}")
+
+            REQUIRED_VRP_FIELDS = [
+                "patternType", "scopeKey", "timesObserved", "timesPrecededIncident",
+                "avgDetectionLagDays", "evidenceTier", "lastValidatedAt", "sourceAgent",
+            ]
+
+            # Guard: `{}` is falsy in Python so use `is not None` to distinguish
+            # "block parsed and is empty" from "block not found at all".
+            if vrp_data is not None:
+                print(f"\n  {CYAN}{'─'*56}{RESET}")
+                print(f"  {CYAN}{BOLD}  ValidatedRiskPattern — embedded payload{RESET}")
+                print(f"  {CYAN}{'─'*56}{RESET}")
+                all_present = True
+                for field in REQUIRED_VRP_FIELDS:
+                    val = vrp_data.get(field)
+                    if val is not None:
+                        print(f"  {GREEN}✔{RESET}  {field:<28} {val}")
+                    else:
+                        print(f"  {YELLOW}⚠{RESET}  {field:<28} (null — check correlation pipeline)")
+                        all_present = False
+                # evidenceSourceNote is optional per spec, print separately
+                note = vrp_data.get("evidenceSourceNote")
+                if note:
+                    note_display = (note[:90] + "…") if len(str(note)) > 90 else note
+                    print(f"  {CYAN}→{RESET}  {'evidenceSourceNote':<28} {note_display}")
+                print(f"  {CYAN}{'─'*56}{RESET}")
+                if all_present:
+                    print(f"  {GREEN}{BOLD}✔  All required VRP fields present — machine-parseable{RESET}\n")
+                else:
+                    print(f"  {YELLOW}⚠  Some VRP fields are null — partial structured payload{RESET}\n")
+            else:
+                warn("VRP block not found in annotation_text — prose-only annotation written.")
+
         else:
-            warn(f"DataHub writeback: {result}")
+            warn(f"DataHub writeback returned unexpected status: {write_status}")
+            warn(f"Full result: {result}")
+
+        return result
     except Exception as ex:
         warn(f"DataHub writeback skipped: {ex}")
         warn("(Non-blocking — rest of the flow completed.)")
+        return None
+
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -398,25 +468,29 @@ def main():
         sys.exit(1)
 
     slack_result = fire_slack_alert(model_id)
-    datahub_writeback(candidate_id, model_id)
+    wb_result = datahub_writeback(candidate_id, model_id)
 
     banner("E2E TEST COMPLETE ✔", GREEN)
     slack_ok = slack_result.get("ok", False)
+    wb_status = (wb_result or {}).get("status", "skipped")
+    vrp_confirmed = wb_result is not None and wb_status in ("written_back", "already_written_back")
     print(
         f"""
   {BOLD}What just happened:{RESET}
-  {GREEN}✔{RESET}  Lineage event injected    (schema_change by alice.ng@company.com)
-  {GREEN}✔{RESET}  Metric anomaly detected   (revenue_at_risk, 3σ+ spike)
-  {GREEN}✔{RESET}  Candidate surfaced on UI  ({candidate_id[:16]}...)
+  {GREEN}✔{RESET}  Lineage event injected      (schema_change by alice.ng@company.com)
+  {GREEN}✔{RESET}  Metric anomaly detected     (revenue_at_risk, 3σ+ spike)
+  {GREEN}✔{RESET}  Candidate surfaced on UI    ({candidate_id[:16]}...)
   {GREEN}✔{RESET}  Human confirmed via browser  ← your click
   {GREEN}✔{RESET}  Incident row written to DB   (audit ledger updated)
   {GREEN}✔{RESET}  Org pattern rollups updated  (correlation_service)
-  {"  " + GREEN + "✔" + RESET + "  Slack alert dispatched      (#data-incidents)" if slack_ok else "  " + YELLOW + "⚠" + RESET + "  Slack: " + str(slack_result.get("error", "no webhook configured"))}
-  {GREEN}✔{RESET}  ValidatedRiskPattern → DataHub  ({model_id.split('.')[-1].replace(',PROD)', '')})
+  {"  " + GREEN + "✔" + RESET + "  Slack alert dispatched       (#data-incidents)" if slack_ok else "  " + YELLOW + "⚠" + RESET + "  Slack: " + str(slack_result.get("error", "no webhook configured"))}
+  {GREEN + "✔" + RESET if vrp_confirmed else YELLOW + "⚠" + RESET}  DataHub InstitutionalMemory  ({wb_status})
+    {DIM}↳ annotation embeds structured vrp JSON (patternType, evidenceTier, timesObserved, …){RESET}
 
   {DIM}View findings: {FRONTEND}/findings{RESET}
     """
     )
+
 
 
 if __name__ == "__main__":
