@@ -1,6 +1,6 @@
-# Varve
-
 <div align="center">
+
+<img src="docs/images/varve_logo.png" alt="Varve Logo" width="280" />
 
 ### **Tells you which of your production ML models will break next — and proves it, before you have to trust it.**
 
@@ -8,6 +8,7 @@
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg?style=for-the-badge)](LICENSE)
 [![Python](https://img.shields.io/badge/Backend-FastAPI_3.11-009688?style=for-the-badge&logo=fastapi)](service/)
 [![Next.js](https://img.shields.io/badge/Frontend-Next.js_16-000000?style=for-the-badge&logo=nextdotjs)](app/)
+[![Contributing](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge)](CONTRIBUTING.md)
 
 ---
 
@@ -23,6 +24,16 @@
 
 > [!NOTE]
 > *Every claim Varve makes carries a visible label for how much you should trust it, and every one of those labels is independently checkable.*
+
+---
+
+## Community & Open Source
+
+We welcome community contributions! Please check out our guidelines:
+- 📖 [Contributing Guide](CONTRIBUTING.md)
+- 🤝 [Code of Conduct](CODE_OF_CONDUCT.md)
+- 🛡️ [Security Policy](SECURITY.md)
+- 📜 [Apache 2.0 License](LICENSE)
 
 ---
 
