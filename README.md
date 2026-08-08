@@ -10,22 +10,17 @@
 [![Next.js](https://img.shields.io/badge/Frontend-Next.js_16-000000?style=for-the-badge&logo=nextdotjs)](app/)
 [![Contributing](https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=for-the-badge)](CONTRIBUTING.md)
 
----
 
 ### 📺 **Watch the 3-Minute Demo Video**
 
 [![Varve Demo Video](https://img.youtube.com/vi/KfsU7xwhtp0/maxresdefault.jpg)](https://youtu.be/KfsU7xwhtp0)
 
-*▶ **[Click here to watch the Varve Video Walkthrough on YouTube](https://youtu.be/KfsU7xwhtp0)** — demonstrating live lineage anomaly detection, bounded financial exposure calculation, human-in-the-loop triage, Slack alerts, and DataHub `ValidatedRiskPattern` writeback.*
-
 </div>
 
----
 
 > [!NOTE]
 > *Every claim Varve makes carries a visible label for how much you should trust it, and every one of those labels is independently checkable.*
 
----
 
 ## Community & Open Source
 
@@ -35,7 +30,6 @@ We welcome community contributions! Please check out our guidelines:
 - 🛡️ [Security Policy](SECURITY.md)
 - 📜 [Apache 2.0 License](LICENSE)
 
----
 
 ## Table of Contents
 
@@ -54,7 +48,6 @@ We welcome community contributions! Please check out our guidelines:
 - [What's Next](#whats-next)
 - [Track Fit](#track-fit)
 
----
 
 ## The One-Minute Version
 
@@ -67,7 +60,6 @@ We welcome community contributions! Please check out our guidelines:
 - **It composes three DataHub primitives, not just lineage.** Ownership metadata auto-routes findings to the right team. Governance tags — read natively where present, inferred where absent, and always labeled which — adjust severity. Lineage alone was never the whole picture.
 - **It writes back to DataHub, not just to its own database.** Every finding lands as metadata on the actual lineage node, idempotently, so re-running Varve never litters a node with duplicate annotations.
 
----
 
 ## Why "Varve"
 
@@ -75,7 +67,6 @@ A **varve** is a single annual layer of lakebed sediment — thin, distinct, and
 
 ML models accumulate the same kind of layering. A feature added two days after a churn spike. A threshold lowered during a traffic incident and never revisited. Varve reads those layers — not to tell a story about the past for its own sake, but because the shape of a layer tells you whether it's load-bearing or a liability, and whether it's likely to fail again.
 
----
 
 ## The Problem
 
@@ -83,7 +74,6 @@ A platform team running forty production models has three people to watch them. 
 
 DataHub already has the answer buried inside it. It knows every model's full history of feature additions, pipeline changes, and threshold adjustments. What it doesn't have — until now — is a way to check whether a given shape of change has, empirically, preceded a real failure before. Varve is that missing layer.
 
----
 
 ## What It Actually Does
 
@@ -96,7 +86,6 @@ DataHub already has the answer buried inside it. It knows every model's full his
 7. **Writes the finding back to DataHub**, idempotently, as metadata on the lineage node itself, so the knowledge compounds forward instead of living in a Slack thread.
 8. **Ledgers every decision.** Every finding, severity resolution, downgrade, ownership routing, and write-back is recorded in an append-only, hash-chained table that can be independently re-verified at any time.
 
----
 
 ## Example Output
 
@@ -111,7 +100,6 @@ DataHub already has the answer buried inside it. It knows every model's full his
 
 The distinction between these three entries is the entire point of the system: a prediction backed by this team's own precedent, archaeology with no precedent at all, and an honest, capped estimate for a team that hasn't built up history yet — never presented with more confidence than the evidence supports.
 
----
 
 ## Design Principles
 
@@ -129,7 +117,6 @@ The distinction between these three entries is the entire point of the system: a
 
 **Severity composes three DataHub primitives, not just lineage.** Ownership metadata resolves the correct team or individual to route a finding to, using a documented priority order (specific individual owner, then a designated fallback owner, then the owning group). Governance and classification tags — read directly from DataHub where present, and conservatively inferred from naming conventions where absent — apply a severity multiplier. Every finding's output honestly labels which of these two sources produced its tag, so an inferred heuristic is never mistaken for verified governance data.
 
----
 
 ## Architecture
 
@@ -165,7 +152,6 @@ Append-only hash-chained ledger, independently re-verifiable at any time
 | Frontend UI | Next.js 16 + React 19 + TailwindCSS |
 | Audit trail | Append-only SHA-256 hash-chained ledger table |
 
----
 
 ## Validation
 
@@ -178,13 +164,11 @@ Rather than claim Varve "correlates patterns" on the strength of a demo alone, i
 - **The audit ledger independently verified**: every finding, severity resolution, downgrade, ownership routing decision, and write-back across a full run confirmed as an intact, untampered hash chain.
 - **DataHub write-back independently confirmed**, not merely assumed successful — read back directly from DataHub after writing, and proven idempotent under repeated runs against the same node.
 
----
 
 ## Open-Source Contribution
 
 Varve proposes a new DataHub aspect type, `ValidatedRiskPattern`, as a genuine extension to DataHub's own metadata model — not a Varve-internal convention buried in free text. Today, DataHub can describe *what* changed and *when*, but has no first-class way to record *this shape of change has, empirically, preceded failure before, N times, with an average detection lag of D days, at this evidence tier*. The full RFC, its rationale, and a reference schema stub are in `docs/datahub-rfc-validated-risk-pattern.md` and `docs/validated-risk-pattern.avsc` — submitted as a concrete proposal so any future agent, not just Varve, can read and write this shape of evidence consistently.
 
----
 
 ## What's Explicitly Out of Scope
 
@@ -196,7 +180,6 @@ Stated plainly rather than concealed:
 - **Severity and fallback weighting are hand-tuned, not learned**, at every scope — including the industry-general baseline rates, which are seeded from a small number of cited published sources, not mined at scale. Learning these weights from an organization's own accumulated confirmations over time is a natural next step, not a claim made now.
 - **The `ValidatedRiskPattern` aspect is a proposal and reference implementation**, not a claim of upstream merge by submission time.
 
----
 
 ## Running It Locally
 
@@ -220,7 +203,7 @@ cd scripts
 
 ```bash
 # 1. Clone repo
-git clone https://github.com/your-org/varve.git
+git clone https://github.com/cridiv/varve.git
 cd varve
 
 # 2. Start DataHub sample graph (optional)
@@ -240,7 +223,6 @@ cd app && npm run dev                    # runs Next.js on http://localhost:3000
 cd scripts && ../service/.venv/bin/python e2e_live_test.py
 ```
 
----
 
 ## What We Learned Building This
 
@@ -250,7 +232,6 @@ The valuable signal was never in any single table alone. Lineage events aren't n
 
 We also learned, catching it ourselves before it reached a demo, that a fallback is only honest if it's actually evaluated, not just inherited. An early version of the industry-general tier silently passed through a provisional severity guess unchanged. Fixing that — making the fallback tier subject to the same evidentiary thresholds as validated data — turned out to be one of the more important corrections in the whole build, and is now one of the system's independently verified behaviors.
 
----
 
 ## What's Next
 
@@ -259,12 +240,10 @@ We also learned, catching it ourselves before it reached a demo, that a fallback
 - A Slack/PagerDuty integration so a validated high-risk finding can page its routed owner directly, not just appear on a dashboard.
 - Push the `ValidatedRiskPattern` RFC into an actual conversation with DataHub's maintainers.
 
----
 
 ## Track Fit
 
 This directly answers the **Production ML Agents** track: Varve reads DataHub's end-to-end ML lineage, ownership, and governance metadata via the MCP Server / Agent Context Kit, and its entire output is built to catch silent, undocumented risk before it costs money — ranked by real precedent, honestly labeled by evidence tier, self-improving from normal use, and written back to DataHub so the next engineer or agent inherits exactly what was found.
 
----
 
 *Open source under the [Apache 2.0 License](LICENSE).*
