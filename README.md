@@ -27,7 +27,6 @@
 We welcome community contributions! Please check out our guidelines:
 - 📖 [Contributing Guide](CONTRIBUTING.md)
 - 🤝 [Code of Conduct](CODE_OF_CONDUCT.md)
-- 🛡️ [Security Policy](SECURITY.md)
 - 📜 [Apache 2.0 License](LICENSE)
 
 
